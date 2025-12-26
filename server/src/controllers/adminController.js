@@ -12,6 +12,10 @@ const ADMIN_CREDENTIALS = {
   password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // password: "password"
 };
 
+function generateInviteCode() {
+    return Math.random().toString(36).substring(2, 10);
+  }
+  
 async function loginAdmin(req, res) {
   const { email, password } = req.body;
   
@@ -38,13 +42,28 @@ async function getGuests(req, res) {
   }
 }
 
-// POST /api/admin/guests
 async function createGuest(req, res) {
   try {
-    const guest = new Guest(req.body);
+    console.log('Admin creating guest:', req.body); // DEBUG
+    
+    const { fullName, gender, withFamily, inviteType, side } = req.body;
+    
+    const inviteCode = generateInviteCode();
+
+    const guest = new Guest({
+      fullName: fullName.trim(),
+      gender,
+      inviteCode,
+      withFamily: !!withFamily,
+      inviteType: inviteType || 'wedding',
+      side: side || 'groom'
+    });
+
     await guest.save();
+    console.log('Guest created:', guest.inviteCode); // DEBUG
     res.status(201).json(guest);
   } catch (err) {
+    console.error('Admin create guest error:', err.message);
     res.status(400).json({ error: err.message });
   }
 }

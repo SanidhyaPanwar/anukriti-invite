@@ -45,6 +45,7 @@ function AdminPage() {
     fullName: "",
     gender: "male",
     withFamily: false,
+    inviteType: 'wedding',
     side: "bride",
   });
   const [newEvent, setNewEvent] = useState({
@@ -59,12 +60,10 @@ function AdminPage() {
 
   useEffect(() => {
     if (token && !loginOpen) {
-      // ← Only load when logged in
       loadData();
     }
-  }, [token, loginOpen]); // ← Add loginOpen dependency
+  }, [token, loginOpen]);
 
-  // Search guests as user types
   useEffect(() => {
     if (searchQuery && token) {
       const searchGuests = async () => {
@@ -80,7 +79,7 @@ function AdminPage() {
           console.error("Search error:", err);
         }
       };
-      const timeoutId = setTimeout(searchGuests, 300); // Debounce 300ms
+      const timeoutId = setTimeout(searchGuests, 300);
       return () => clearTimeout(timeoutId);
     } else {
       setSearchResults([]);
@@ -115,7 +114,7 @@ function AdminPage() {
 
   const handleLogin = async () => {
     console.log("Login clicked!", loginCredentials);
-    setLoading(true); // ← Show loading
+    setLoading(true);
     try {
       const res = await axios.post(
         `${API_BASE_URL}/api/admin/login`,
@@ -125,7 +124,6 @@ function AdminPage() {
       localStorage.setItem("adminToken", res.data.token);
       setToken(res.data.token);
       setLoginOpen(false);
-      // Don't call loadData here - useEffect will handle it
     } catch (err) {
       console.error("Login error:", err.response?.data || err.message);
       alert("Login failed: " + (err.response?.data?.message || "Try again"));
@@ -142,21 +140,40 @@ function AdminPage() {
 
   const handleAddGuest = async () => {
     try {
-      await axios.post(`${API_BASE_URL}/api/admin/guests`, newGuest, {
-        headers: { Authorization: `Bearer ${token}` },
+      console.log('Adding guest:', newGuest); // DEBUG
+      
+      const guestData = {
+        fullName: newGuest.fullName.trim(),
+        gender: newGuest.gender,
+        withFamily: !!newGuest.withFamily,
+        inviteType: newGuest.inviteType,  // ← EXPLICIT
+        side: newGuest.side
+      };
+      
+      console.log('Sending to backend:', guestData); // DEBUG
+      
+      await axios.post(`${API_BASE_URL}/api/admin/guests`, guestData, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-      setNewGuest({
-        fullName: "",
-        gender: "male",
-        withFamily: false,
-        side: "groom",
+      
+      setNewGuest({ 
+        fullName: '', 
+        gender: 'male', 
+        withFamily: false, 
+        inviteType: 'wedding',
+        side: 'bride' 
       });
+      
       loadData();
+      alert('Guest added successfully!');
     } catch (err) {
-      alert("Error adding guest");
+      console.error('Admin add guest error:', err);
+      console.error('Error response:', err.response?.data);
+      alert('Error: ' + (err.response?.data?.error || err.message || 'Try again'));
     }
   };
-
+  
+  
   const handleAddEvent = async () => {
     try {
       await axios.post(`${API_BASE_URL}/api/admin/events`, newEvent, {
@@ -199,7 +216,6 @@ function AdminPage() {
     }
   };
 
-  // Replace the entire loginOpen block:
   if (loginOpen) {
     return (
       <Container maxWidth="sm" sx={{ mt: 8, textAlign: "center" }}>
@@ -233,7 +249,7 @@ function AdminPage() {
                 password: e.target.value,
               })
             }
-            placeholder="password" // ← Helpful hint
+            placeholder="password"
           />
           <Button
             variant="contained"
@@ -283,23 +299,24 @@ function AdminPage() {
         {/* GUESTS TAB */}
         {activeTab === 0 && (
           <Box sx={{ mb: 4 }}>
-            {/* ADD GUEST FORM */}
+            {/* ADD GUEST FORM - NEW 5-FIELD */}
             <Paper sx={{ p: 4, mb: 4 }}>
               <Typography variant="h6" gutterBottom>
                 Add Guest
               </Typography>
-              <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+              <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "end" }}>
                 <TextField
-                  label="Full Name"
+                  label="Full Name *"
                   value={newGuest.fullName}
                   onChange={(e) =>
                     setNewGuest({ ...newGuest, fullName: e.target.value })
                   }
                   sx={{ flex: 1, minWidth: 200 }}
                 />
+                
                 <TextField
                   select
-                  label="Gender"
+                  label="Gender *"
                   value={newGuest.gender}
                   onChange={(e) =>
                     setNewGuest({ ...newGuest, gender: e.target.value })
@@ -310,9 +327,10 @@ function AdminPage() {
                   <option value="male">Male</option>
                   <option value="female">Female</option>
                 </TextField>
+                
                 <TextField
                   select
-                  label="Side"
+                  label="Side *"
                   value={newGuest.side}
                   onChange={(e) =>
                     setNewGuest({ ...newGuest, side: e.target.value })
@@ -323,17 +341,47 @@ function AdminPage() {
                   <option value="bride">Bride</option>
                   <option value="groom">Groom</option>
                 </TextField>
+                
+                <TextField
+                  select
+                  label="Invite Type *"
+                  value={newGuest.inviteType}
+                  onChange={(e) =>
+                    setNewGuest({ ...newGuest, inviteType: e.target.value })
+                  }
+                  sx={{ minWidth: 140 }}
+                  SelectProps={{ native: true }}
+                >
+                  <option value="wedding">Wedding Only</option>
+                  <option value="complete">Complete Events</option>
+                </TextField>
+                
+                <TextField
+                  select
+                  label="Family"
+                  value={newGuest.withFamily ? 'yes' : 'no'}
+                  onChange={(e) =>
+                    setNewGuest({ ...newGuest, withFamily: e.target.value === 'yes' })
+                  }
+                  sx={{ minWidth: 120 }}
+                  SelectProps={{ native: true }}
+                >
+                  <option value="no">Single</option>
+                  <option value="yes">With Family</option>
+                </TextField>
+                
                 <Button
                   variant="contained"
                   startIcon={<Add />}
                   onClick={handleAddGuest}
+                  disabled={!newGuest.fullName.trim()}
                 >
                   Add Guest
                 </Button>
               </Box>
             </Paper>
 
-            {/* 🔍 SEARCH GUEST */}
+            {/* SEARCH GUEST */}
             <Paper sx={{ p: 4, mb: 4 }}>
               <Typography variant="h6" gutterBottom>
                 Search Guest
@@ -391,7 +439,7 @@ function AdminPage() {
               ))}
             </Paper>
 
-            {/* ALL GUESTS TABLE */}
+            {/* ALL GUESTS TABLE - NEW COLUMNS */}
             <Paper>
               <Typography variant="h6" sx={{ p: 3 }}>
                 All Guests ({guests.length})
@@ -402,6 +450,8 @@ function AdminPage() {
                     <TableCell>Name</TableCell>
                     <TableCell>Gender</TableCell>
                     <TableCell>Side</TableCell>
+                    <TableCell>Invite Type</TableCell>
+                    <TableCell>Family</TableCell>
                     <TableCell>Invite Code</TableCell>
                     <TableCell>Actions</TableCell>
                   </TableRow>
@@ -412,6 +462,16 @@ function AdminPage() {
                       <TableCell>{guest.fullName}</TableCell>
                       <TableCell>{guest.gender}</TableCell>
                       <TableCell>{guest.side}</TableCell>
+                      <TableCell>
+                        <Chip 
+                          label={guest.inviteType === 'complete' ? 'All Events' : 'Wedding Only'} 
+                          size="small" 
+                          color={guest.inviteType === 'complete' ? 'primary' : 'default'}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip label={guest.withFamily ? 'Yes' : 'No'} size="small" color="secondary" />
+                      </TableCell>
                       <TableCell>
                         <Chip label={guest.inviteCode} size="small" />
                       </TableCell>

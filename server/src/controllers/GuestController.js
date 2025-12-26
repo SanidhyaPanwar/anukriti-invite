@@ -6,60 +6,51 @@ function generateInviteCode() {
   return Math.random().toString(36).substring(2, 10);
 }
 
-// POST /api/guests  (admin: create one guest)
 async function createGuest(req, res) {
   try {
     const {
-      fullName,
-      gender,
-      withFamily,
-      familyMembers: rawFamilyMembers,
-      photos,
-      phone,
-      email,
-      side,
+      fullName, gender, withFamily, familyMembers: rawFamilyMembers, photos, phone, email, side
     } = req.body;
 
-    if (!fullName) {
-      return res.status(400).json({ message: "fullName is required" });
+    const inviteCode = generateInviteCode();
+
+    // 🛠️ FIX: Handle familyMembers (strings OR objects)
+    let processedFamilyMembers = [];
+    if (rawFamilyMembers && Array.isArray(rawFamilyMembers)) {
+      processedFamilyMembers = rawFamilyMembers.map(fm => {
+        if (typeof fm === 'string') {
+          return { name: fm, gender: 'male' };
+        } else if (fm && fm.name) {
+          return { name: fm.name, gender: fm.gender || 'male' };
+        }
+        return null;
+      }).filter(Boolean);
     }
 
-    const inviteCode = Math.random().toString(36).substring(2, 10);
-
-    // FIX: Handle both string array AND object array for familyMembers
-    let familyMembers = [];
-    if (rawFamilyMembers) {
-      if (Array.isArray(rawFamilyMembers)) {
-        familyMembers = rawFamilyMembers.map(fm => {
-          if (typeof fm === 'string') {
-            return { name: fm, gender: 'male' };
-          } else if (typeof fm === 'object' && fm.name) {
-            return { name: fm.name, gender: fm.gender || 'male' };
-          }
-          return null;
-        }).filter(Boolean);
-      }
-    }
-
-    const guest = new Guest({
+    const guestData = {
       fullName,
       gender: gender || 'male',
       inviteCode,
       withFamily: !!withFamily,
-      familyMembers,  // Fixed array of objects
+      familyMembers: processedFamilyMembers,  // ← FIXED
       photos: photos || [],
       phone,
       email,
       side: side || "groom",
-    });
+    };
 
+    console.log('Creating guest:', guestData);  // DEBUG
+
+    const guest = new Guest(guestData);
     await guest.save();
     res.status(201).json(guest);
   } catch (err) {
-    console.error("Error creating guest:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    console.error('Create guest error:', err.message);  // DEBUG
+    res.status(400).json({ error: err.message });
   }
 }
+
+
 
 // GET /api/invite/:inviteCode
 async function getInviteByCode(req, res) {

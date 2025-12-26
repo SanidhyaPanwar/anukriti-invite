@@ -5,13 +5,30 @@ import {
 } from '@mui/material';
 import { useParams } from 'react-router-dom';
 
-function ProgrammesTab({ events, inviteCode }) {
+function ProgrammesTab({ events, inviteCode, guest }) {  // ← Added guest prop
   const { eventId } = useParams();
 
-  if (!events?.length) {
+  // ← NEW: Filter events by inviteType
+  const filteredEvents = events.filter(event => {
+    if (guest?.inviteType === 'wedding') {
+      // Wedding only: show only wedding ceremony
+      return event.title.toLowerCase().includes('wedding') || 
+      event.title.toLowerCase().includes('marriage') ||
+      event.title.toLowerCase().includes('reception') ||
+      event.title.toLowerCase().includes('ceremony');
+    }
+    return true;  // Complete: show all events
+  });
+
+  if (!filteredEvents?.length) {
     return (
       <Paper sx={{ p: 4, textAlign: 'center' }}>
-        <Typography>No programmes added yet</Typography>
+        <Typography>
+          {guest?.inviteType === 'wedding' 
+            ? 'Wedding ceremony details coming soon' 
+            : 'No programmes added yet'
+          }
+        </Typography>
       </Paper>
     );
   }
@@ -19,11 +36,11 @@ function ProgrammesTab({ events, inviteCode }) {
   return (
     <Container>
       <Typography variant="h4" gutterBottom sx={{ mb: 3 }}>
-        Wedding Programmes
+        {guest?.inviteType === 'complete' ? 'Complete Programmes' : 'Wedding Programmes'}
       </Typography>
       
       <List>
-        {events.map((evt) => {
+        {filteredEvents.map((evt) => {
           const themeColor = evt.title.toLowerCase();
           return (
             <ListItem 
