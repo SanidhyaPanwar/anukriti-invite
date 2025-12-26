@@ -7,7 +7,11 @@ const eventSchema = new mongoose.Schema({
   time: { type: String, required: true }, // e.g. "7:00 PM"
   venue: { type: String, required: true },
   description: { type: String },
-});
+  locationLink: { 
+    type: String, 
+    default: 'https://maps.app.goo.gl/KTAxqoj5FYqdvEu69' 
+  }
+}, { timestamps: true });
 
 const Event = mongoose.model("Event", eventSchema);
 

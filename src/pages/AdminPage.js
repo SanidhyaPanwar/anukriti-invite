@@ -45,7 +45,7 @@ function AdminPage() {
     fullName: "",
     gender: "male",
     withFamily: false,
-    inviteType: 'wedding',
+    inviteType: "wedding",
     side: "bride",
   });
   const [newEvent, setNewEvent] = useState({
@@ -54,6 +54,7 @@ function AdminPage() {
     time: "",
     venue: "",
     description: "",
+    locationLink: "",
   });
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -140,40 +141,41 @@ function AdminPage() {
 
   const handleAddGuest = async () => {
     try {
-      console.log('Adding guest:', newGuest); // DEBUG
-      
+      console.log("Adding guest:", newGuest); // DEBUG
+
       const guestData = {
         fullName: newGuest.fullName.trim(),
         gender: newGuest.gender,
         withFamily: !!newGuest.withFamily,
-        inviteType: newGuest.inviteType,  // ← EXPLICIT
-        side: newGuest.side
+        inviteType: newGuest.inviteType, // ← EXPLICIT
+        side: newGuest.side,
       };
-      
-      console.log('Sending to backend:', guestData); // DEBUG
-      
+
+      console.log("Sending to backend:", guestData); // DEBUG
+
       await axios.post(`${API_BASE_URL}/api/admin/guests`, guestData, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
-      
-      setNewGuest({ 
-        fullName: '', 
-        gender: 'male', 
-        withFamily: false, 
-        inviteType: 'wedding',
-        side: 'bride' 
+
+      setNewGuest({
+        fullName: "",
+        gender: "male",
+        withFamily: false,
+        inviteType: "wedding",
+        side: "bride",
       });
-      
+
       loadData();
-      alert('Guest added successfully!');
+      alert("Guest added successfully!");
     } catch (err) {
-      console.error('Admin add guest error:', err);
-      console.error('Error response:', err.response?.data);
-      alert('Error: ' + (err.response?.data?.error || err.message || 'Try again'));
+      console.error("Admin add guest error:", err);
+      console.error("Error response:", err.response?.data);
+      alert(
+        "Error: " + (err.response?.data?.error || err.message || "Try again")
+      );
     }
   };
-  
-  
+
   const handleAddEvent = async () => {
     try {
       await axios.post(`${API_BASE_URL}/api/admin/events`, newEvent, {
@@ -185,6 +187,7 @@ function AdminPage() {
         time: "",
         venue: "",
         description: "",
+        locationLink: ""
       });
       loadData();
     } catch (err) {
@@ -304,7 +307,14 @@ function AdminPage() {
               <Typography variant="h6" gutterBottom>
                 Add Guest
               </Typography>
-              <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "end" }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  gap: 2,
+                  flexWrap: "wrap",
+                  alignItems: "end",
+                }}
+              >
                 <TextField
                   label="Full Name *"
                   value={newGuest.fullName}
@@ -313,7 +323,7 @@ function AdminPage() {
                   }
                   sx={{ flex: 1, minWidth: 200 }}
                 />
-                
+
                 <TextField
                   select
                   label="Gender *"
@@ -327,7 +337,7 @@ function AdminPage() {
                   <option value="male">Male</option>
                   <option value="female">Female</option>
                 </TextField>
-                
+
                 <TextField
                   select
                   label="Side *"
@@ -341,7 +351,7 @@ function AdminPage() {
                   <option value="bride">Bride</option>
                   <option value="groom">Groom</option>
                 </TextField>
-                
+
                 <TextField
                   select
                   label="Invite Type *"
@@ -355,13 +365,16 @@ function AdminPage() {
                   <option value="wedding">Wedding Only</option>
                   <option value="complete">Complete Events</option>
                 </TextField>
-                
+
                 <TextField
                   select
                   label="Family"
-                  value={newGuest.withFamily ? 'yes' : 'no'}
+                  value={newGuest.withFamily ? "yes" : "no"}
                   onChange={(e) =>
-                    setNewGuest({ ...newGuest, withFamily: e.target.value === 'yes' })
+                    setNewGuest({
+                      ...newGuest,
+                      withFamily: e.target.value === "yes",
+                    })
                   }
                   sx={{ minWidth: 120 }}
                   SelectProps={{ native: true }}
@@ -369,7 +382,7 @@ function AdminPage() {
                   <option value="no">Single</option>
                   <option value="yes">With Family</option>
                 </TextField>
-                
+
                 <Button
                   variant="contained"
                   startIcon={<Add />}
@@ -463,14 +476,26 @@ function AdminPage() {
                       <TableCell>{guest.gender}</TableCell>
                       <TableCell>{guest.side}</TableCell>
                       <TableCell>
-                        <Chip 
-                          label={guest.inviteType === 'complete' ? 'All Events' : 'Wedding Only'} 
-                          size="small" 
-                          color={guest.inviteType === 'complete' ? 'primary' : 'default'}
+                        <Chip
+                          label={
+                            guest.inviteType === "complete"
+                              ? "All Events"
+                              : "Wedding Only"
+                          }
+                          size="small"
+                          color={
+                            guest.inviteType === "complete"
+                              ? "primary"
+                              : "default"
+                          }
                         />
                       </TableCell>
                       <TableCell>
-                        <Chip label={guest.withFamily ? 'Yes' : 'No'} size="small" color="secondary" />
+                        <Chip
+                          label={guest.withFamily ? "Yes" : "No"}
+                          size="small"
+                          color="secondary"
+                        />
                       </TableCell>
                       <TableCell>
                         <Chip label={guest.inviteCode} size="small" />
@@ -506,7 +531,7 @@ function AdminPage() {
               <Box
                 sx={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr auto",
+                  gridTemplateColumns: "1fr 1fr 1fr 1fr auto",
                   gap: 2,
                 }}
               >
@@ -537,7 +562,16 @@ function AdminPage() {
                   onChange={(e) =>
                     setNewEvent({ ...newEvent, venue: e.target.value })
                   }
-                  fullWidth
+                />
+                {/* ← NEW: Google Maps Link */}
+                <TextField
+                  label="Google Maps Link"
+                  placeholder="https://maps.app.goo.gl/abc123"
+                  value={newEvent.locationLink}
+                  onChange={(e) =>
+                    setNewEvent({ ...newEvent, locationLink: e.target.value })
+                  }
+                  sx={{ gridColumn: "span 2" }}
                 />
                 <Button
                   variant="contained"
@@ -566,7 +600,20 @@ function AdminPage() {
                       <TableCell>{event.title}</TableCell>
                       <TableCell>{event.date}</TableCell>
                       <TableCell>{event.time}</TableCell>
-                      <TableCell>{event.venue}</TableCell>
+                      <TableCell>
+                        {event.locationLink ? (
+                          <a
+                            href={event.locationLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {event.venue}
+                          </a>
+                        ) : (
+                          event.venue
+                        )}
+                      </TableCell>
+
                       <TableCell>
                         <IconButton
                           onClick={() =>
