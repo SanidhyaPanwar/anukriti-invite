@@ -30,7 +30,7 @@ export default function WelcomeReveal() {
   const canvasRef2 = useRef(null);
   const canvasRef3 = useRef(null);
 
-  const API_BASE = 'http://localhost:5001/api';
+  const API_BASE = 'https://anukriti-invite-1.onrender.com/api';
   const WEDDING_DATE = new Date('2026-12-10T20:00:00').getTime();
 
   // Auto-scroll mechanism variables

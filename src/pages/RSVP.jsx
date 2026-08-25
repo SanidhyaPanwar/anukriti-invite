@@ -21,7 +21,7 @@ export default function RSVP() {
   const [weddingMood, setWeddingMood] = useState('');
   const [note, setNote] = useState('');
 
-  const API_BASE = 'http://localhost:5001/api';
+  const API_BASE = 'https://anukriti-invite-1.onrender.com/api';
 
   useEffect(() => {
     axios.get(`${API_BASE}/guest/${inviteCode}`)

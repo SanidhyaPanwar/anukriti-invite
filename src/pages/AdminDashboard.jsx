@@ -8,7 +8,7 @@ export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState('guests');
 
-  const API_BASE = 'http://localhost:5001/api';
+  const API_BASE = 'https://anukriti-invite-1.onrender.com/api';
 
   // --- GUEST STATE ---
   const initialGuestForm = { fullName: '', phone: '', gender: 'male', withFamily: false, side: 'bride', inviteType: 'wedding', familyMembers: [], photos: [] };

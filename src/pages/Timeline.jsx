@@ -15,7 +15,7 @@ export default function Timeline() {
   // Canvas ref for local petals
   const canvasRef = useRef(null);
 
-  const API_BASE = 'http://localhost:5001/api';
+  const API_BASE = 'https://anukriti-invite-1.onrender.com/api';
 
   useEffect(() => {
     axios.get(`${API_BASE}/guest/${inviteCode}`)
