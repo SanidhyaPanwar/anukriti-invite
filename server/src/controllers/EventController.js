@@ -1,46 +1,47 @@
-// src/controllers/eventController.js
-const Event = require("../models/Event");
+const Event = require('../models/Event');
 
-// GET /api/events
-async function listEvents(req, res) {
+// Admin: Create Event
+exports.createEvent = async (req, res) => {
   try {
-    const events = await Event.find().sort({ date: 1 }).lean();
-    res.json(events);
-  } catch (err) {
-    console.error("Error fetching events:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-}
-
-// POST /api/events  (admin: create one event)
-async function createEvent(req, res) {
-  try {
-    const { title, date, time, venue, description } = req.body;
-
-    if (!title || !date || !time || !venue) {
-      return res
-        .status(400)
-        .json({ message: "title, date, time, and venue are required" });
-    }
-
-    const event = new Event({
-      title,
-      date,
-      time,
-      venue,
-      description,
-    });
-
+    const event = new Event(req.body);
     await event.save();
-
     res.status(201).json(event);
-  } catch (err) {
-    console.error("Error creating event:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
-}
-
-module.exports = {
-  listEvents,
-  createEvent,
 };
+
+// Admin: Update Event
+exports.updateEvent = async (req, res) => {
+  try {
+    const event = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.status(200).json(event);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Guest: Get Timeline based on their invite type
+exports.getTimeline = async (req, res) => {
+    try {
+      const { inviteType } = req.query;
+      
+      let filter = {};
+      if (inviteType === 'wedding') {
+        filter.eventType = 'main-wedding';
+      }
+  
+      const events = await Event.find(filter);
+      
+      // Auto-sort chronologically by combining date and time into a native JS Date object
+      events.sort((a, b) => {
+        const dateA = new Date(`${a.date} ${a.time}`);
+        const dateB = new Date(`${b.date} ${b.time}`);
+        return dateA - dateB;
+      });
+  
+      res.status(200).json(events);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  };

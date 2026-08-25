@@ -11,12 +11,16 @@ const guestSchema = new mongoose.Schema({
   withFamily: { type: Boolean, default: false },
   familyMembers: [{ name: String, gender: String }],
   photos: [String],
+  rsvpStatus: { type: String, enum: ['pending', 'attending', 'declined'], default: 'pending' },
+  emotionalGuess: { type: String, default: '' },
+  weddingMood: { type: String, default: '' },
+  guestNote: { type: String, default: '' },
   phone: String,
   email: String,
   side: { 
     type: String, 
     enum: ['bride', 'groom'], 
-    default: 'groom' 
+    default: 'bride' 
   },
   inviteType: { 
     type: String, 
