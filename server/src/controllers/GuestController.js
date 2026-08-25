@@ -80,4 +80,11 @@ exports.createGuestRsvp = async (req, res) => {
       }
   };
 
-  
+  exports.deleteGuest = async (req, res) => {
+    try {
+      await Guest.findByIdAndDelete(req.params.id);
+      res.status(200).json({ message: 'Guest deleted successfully' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  };

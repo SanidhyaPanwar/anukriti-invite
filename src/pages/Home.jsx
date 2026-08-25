@@ -50,7 +50,7 @@ export default function Home() {
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: "easeOut" }}
-        className="w-full max-w-md bg-[#2c1238]/80 backdrop-blur-md rounded-3xl shadow-2xl border border-gold/40 p-8 md:p-10 text-center relative z-10"
+        className="w-full max-w-md bg-[#2c1238] backdrop-blur-md rounded-3xl shadow-2xl border border-gold/40 p-8 md:p-10 text-center relative z-10"
       >
         {/*  Crest */}
         <div className="mx-auto w-16 h-16 rounded-full bg-lavender-950 border-2 border-gold flex items-center justify-center text-2xl shadow-xl mb-4">

@@ -17,5 +17,10 @@ router.put('/admin/event/:id', adminAuth, eventController.updateEvent);
 router.post('/admin/toggle-keepalive', adminAuth, adminController.toggleKeepAlive);
 router.get('/admin/guests', adminAuth, guestController.getAllGuests);
 router.put('/admin/guest/:id', adminAuth, guestController.updateGuest);
+router.post('/admin/verify', adminAuth, adminController.verifyLogin);
+
+// === DELETE ROUTES (Protected) ===
+router.delete('/admin/guest/:id', adminAuth, guestController.deleteGuest);
+router.delete('/admin/event/:id', adminAuth, eventController.deleteEvent);
 
 module.exports = router;

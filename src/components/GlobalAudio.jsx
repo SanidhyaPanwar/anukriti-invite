@@ -20,20 +20,26 @@ export function GlobalAudioProvider({ children }) {
     }
   };
 
+  // NEW: Explicit pause function so RSVP page can pause the music
+  const pauseAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
+
   const toggleAudio = () => {
     if (audioRef.current) {
       if (isPlaying) {
-        audioRef.current.pause();
-        setIsPlaying(false);
+        pauseAudio();
       } else {
-        audioRef.current.play();
-        setIsPlaying(true);
+        playAudio();
       }
     }
   };
 
   return (
-    <AudioContext.Provider value={{ isPlaying, playAudio, toggleAudio }}>
+    <AudioContext.Provider value={{ isPlaying, playAudio, pauseAudio, toggleAudio }}>
       
       {/* Sitewide Audio Element */}
       <audio 
@@ -53,7 +59,8 @@ export function GlobalAudioProvider({ children }) {
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.5 }}
             onClick={toggleAudio}
-            className="fixed bottom-24 right-6 z-[99999] w-12 h-12 bg-lavender-900 border border-gold rounded-full flex items-center justify-center text-gold shadow-[0_4px_20px_rgba(212,175,55,0.4)] transition-transform hover:scale-110"          >
+            className="fixed bottom-24 right-6 z-[99999] w-12 h-12 bg-lavender-900 border border-gold rounded-full flex items-center justify-center text-gold shadow-[0_4px_20px_rgba(212,175,55,0.4)] transition-transform hover:scale-110"          
+          >
             {isPlaying ? <Volume2 size={22} /> : <VolumeX size={22} />}
           </motion.button>
         )}

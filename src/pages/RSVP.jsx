@@ -1,18 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Edit3, Send } from 'lucide-react';
+import { Check, Edit3 } from 'lucide-react';
+import { useAudio } from '../components/GlobalAudio';
+
+// Import the sound effects
+import declineSoundFile from '../assets/faaa.mp3';
+import acceptSoundFile from '../assets/wow.mp3';
 
 export default function RSVP() {
   const { inviteCode } = useParams();
+  const { playAudio, pauseAudio } = useAudio(); // Access global audio controls
+  
   const [guest, setGuest] = useState(null);
   const [loading, setLoading] = useState(true);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showModal, setShowModal] = useState(false);
   
-  // Track if they have already submitted
   const [isAlreadySubmitted, setIsAlreadySubmitted] = useState(false);
 
   // Form States
@@ -21,7 +27,11 @@ export default function RSVP() {
   const [weddingMood, setWeddingMood] = useState('');
   const [note, setNote] = useState('');
 
-  const API_BASE = 'https://anukriti-invite-1.onrender.com/api';
+  // Audio References for the sound effects
+  const declineAudioRef = useRef(new Audio(declineSoundFile));
+  const acceptAudioRef = useRef(new Audio(acceptSoundFile));
+
+  const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
   useEffect(() => {
     axios.get(`${API_BASE}/guest/${inviteCode}`)
@@ -29,7 +39,6 @@ export default function RSVP() {
         const data = res.data;
         setGuest(data);
         
-        // If they already submitted an RSVP, pre-fill states and lock view
         if (data.rsvpStatus && data.rsvpStatus !== 'pending') {
           setAttending(data.rsvpStatus === 'attending' ? 'yes' : 'no');
           setEmotionalGuess(data.emotionalGuess || '');
@@ -37,7 +46,6 @@ export default function RSVP() {
           setNote(data.guestNote || '');
           setIsAlreadySubmitted(true);
         }
-        
         setLoading(false);
       })
       .catch(err => {
@@ -45,6 +53,43 @@ export default function RSVP() {
         setLoading(false);
       });
   }, [inviteCode]);
+
+  // Audio Playback Logic for Radio Buttons
+  const handleAttendanceChange = (status) => {
+    setAttending(status);
+
+    // Pause global background music first
+    pauseAudio();
+
+    if (status === 'no') {
+      // Stop the accept sound if it was playing
+      acceptAudioRef.current.pause();
+      acceptAudioRef.current.currentTime = 0;
+      
+      // Reset and play decline sound
+      const audio = declineAudioRef.current;
+      audio.pause();
+      audio.currentTime = 0;
+      audio.play().catch(e => console.log("Audio play blocked", e));
+      
+      // Resume BG music when sound effect finishes
+      audio.onended = () => { playAudio(); };
+
+    } else if (status === 'yes') {
+      // Stop the decline sound if it was playing
+      declineAudioRef.current.pause();
+      declineAudioRef.current.currentTime = 0;
+      
+      // Reset and play accept sound
+      const audio = acceptAudioRef.current;
+      audio.pause();
+      audio.currentTime = 0;
+      audio.play().catch(e => console.log("Audio play blocked", e));
+      
+      // Resume BG music when sound effect finishes
+      audio.onended = () => { playAudio(); };
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -130,21 +175,38 @@ export default function RSVP() {
         </motion.div>
       ) : (
 
-        /* FORM SECTION (Shown if not submitted yet, or if they clicked "Edit") */
+        /* FORM SECTION */
         <form onSubmit={handleSubmit} className="w-full max-w-lg space-y-6">
           
           {/* ATTENDANCE CARD */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-[#FAF8F5] rounded-3xl p-6 border-2 border-gold/40 shadow-xl relative overflow-hidden">
             <h2 className="text-xl font-bold text-lavender-950 mb-4">Will you be joining us?</h2>
             <div className="flex gap-4 w-full">
-              <label className={`flex-1 py-3 px-4 rounded-xl border-2 transition-all cursor-pointer font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 ${attending === 'yes' ? 'bg-lavender-900 border-lavender-900 text-white shadow-md transform scale-105' : 'bg-transparent border-gray-300 text-gray-500'}`}>
-                <input type="radio" name="attending" value="yes" checked={attending === 'yes'} onChange={(e) => setAttending(e.target.value)} className="hidden" />
+              
+              {/* JOYFULLY ACCEPT BUTTON */}
+              <label 
+                onClick={(e) => { 
+                  e.preventDefault(); // Prevents double-clicking issues with hidden inputs
+                  handleAttendanceChange('yes'); 
+                }}
+                className={`flex-1 py-3 px-4 rounded-xl border-2 transition-all cursor-pointer font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 ${attending === 'yes' ? 'bg-lavender-900 border-lavender-900 text-white shadow-md transform scale-105' : 'bg-transparent border-gray-300 text-gray-500'}`}
+              >
+                <input type="radio" name="attending" value="yes" checked={attending === 'yes'} readOnly className="hidden" />
                 Joyfully Accept
               </label>
-              <label className={`flex-1 py-3 px-4 rounded-xl border-2 transition-all cursor-pointer font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 ${attending === 'no' ? 'bg-amber-800 border-amber-800 text-white shadow-md transform scale-105' : 'bg-transparent border-gray-300 text-gray-500'}`}>
-                <input type="radio" name="attending" value="no" checked={attending === 'no'} onChange={(e) => setAttending(e.target.value)} className="hidden" />
+              
+              {/* REGRETFULLY DECLINE BUTTON */}
+              <label 
+                onClick={(e) => { 
+                  e.preventDefault(); // Prevents double-clicking issues with hidden inputs
+                  handleAttendanceChange('no'); 
+                }}
+                className={`flex-1 py-3 px-4 rounded-xl border-2 transition-all cursor-pointer font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 ${attending === 'no' ? 'bg-amber-800 border-amber-800 text-white shadow-md transform scale-105' : 'bg-transparent border-gray-300 text-gray-500'}`}
+              >
+                <input type="radio" name="attending" value="no" checked={attending === 'no'} readOnly className="hidden" />
                 Regretfully Decline
               </label>
+
             </div>
           </motion.div>
 
@@ -220,7 +282,7 @@ export default function RSVP() {
       {/* SUCCESS MODAL */}
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#130915]/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-[#130915]/80 backdrop-blur-sm">
             <motion.div 
               initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0 }}
               className="bg-[#FAF8F5] rounded-3xl max-w-sm w-full p-8 text-center border border-gold shadow-2xl relative"
