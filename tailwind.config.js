@@ -25,7 +25,7 @@ export default {
           }
         },
         fontFamily: {
-          script: ['"Great Vibes"', 'cursive'], 
+          script: ['"Alex Brush"', 'cursive'], 
           sans: ['"Montserrat"', 'sans-serif'],
         },
       },
