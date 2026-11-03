@@ -11,8 +11,7 @@ export default function AdminDashboard() {
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
   // --- GUEST STATE ---
-  const initialGuestForm = { fullName: '', phone: '', gender: 'male', withFamily: false, side: 'bride', inviteType: 'wedding', familyMembers: [], photos: [] };
-  const [guestForm, setGuestForm] = useState(initialGuestForm);
+  const initialGuestForm = { fullName: '', nickname: '', phone: '', gender: 'male', expectedGuests: 1, withFamily: false, side: 'bride', inviteType: 'wedding', familyMembers: [], photos: [] };  const [guestForm, setGuestForm] = useState(initialGuestForm);
   const [guestsList, setGuestsList] = useState([]);
   const [guestSearch, setGuestSearch] = useState('');
   const [editingGuestId, setEditingGuestId] = useState(null);
@@ -32,28 +31,19 @@ export default function AdminDashboard() {
   const [eventForm, setEventForm] = useState(initialEventForm);
   const [editingEventId, setEditingEventId] = useState(null);
 
-  // Native Date/Time picker helper states
   const [nativeDate, setNativeDate] = useState('');
   const [nativeTime, setNativeTime] = useState('');
-
-  // --- SETTINGS STATE ---
   const [keepAliveStatus, setKeepAliveStatus] = useState(false);
-
-  // --- LOGIN STATES ---
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!password) return;
-    
     setIsLoggingIn(true);
     setLoginError('');
-
     try {
-      await axios.post(`${API_BASE}/admin/verify`, {}, {
-        headers: { 'x-admin-password': password }
-      });
+      await axios.post(`${API_BASE}/admin/verify`, {}, { headers: { 'x-admin-password': password } });
       setIsAuthenticated(true);
     } catch (error) {
       setLoginError('Invalid admin password. Please try again.');
@@ -62,7 +52,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // --- GUEST LOGIC ---
   const fetchGuests = async () => {
     try {
       const res = await axios.get(`${API_BASE}/admin/guests`, { headers: { 'x-admin-password': password } });
@@ -75,15 +64,35 @@ export default function AdminDashboard() {
     if (isAuthenticated && activeTab === 'events') fetchEvents();
   }, [isAuthenticated, activeTab]);
 
-  const addFamilyMember = () => setGuestForm({ ...guestForm, familyMembers: [...guestForm.familyMembers, { name: '', gender: 'male' }] });
+  const addFamilyMember = () => {
+    setGuestForm(prev => ({ 
+      ...prev, 
+      familyMembers: [...prev.familyMembers, { name: '', gender: 'male' }],
+      expectedGuests: prev.expectedGuests + 1 
+    }));
+  };
+
   const updateFamilyMember = (index, field, value) => {
     const updated = [...guestForm.familyMembers];
     updated[index][field] = value;
     setGuestForm({ ...guestForm, familyMembers: updated });
   };
+
   const removeFamilyMember = (index) => {
     const updated = guestForm.familyMembers.filter((_, i) => i !== index);
-    setGuestForm({ ...guestForm, familyMembers: updated });
+    setGuestForm(prev => ({ 
+      ...prev, 
+      familyMembers: updated,
+      expectedGuests: Math.max(1, prev.expectedGuests - 1)
+    }));
+  };
+
+  const handleFamilyToggle = (checked) => {
+    setGuestForm(prev => ({
+      ...prev,
+      withFamily: checked,
+      expectedGuests: checked ? Math.max(1, prev.familyMembers.length + 1) : 1
+    }));
   };
 
   const addPhoto = () => setGuestForm({ ...guestForm, photos: [...(guestForm.photos || []), ''] });
@@ -128,7 +137,14 @@ export default function AdminDashboard() {
   };
 
   const handleEditGuestClick = (guest) => {
-    setGuestForm({ ...guest, phone: guest.phone || '', photos: guest.photos || [] });
+    setGuestForm({ 
+      ...initialGuestForm, 
+      ...guest, 
+      phone: guest.phone || '', 
+      nickname: guest.nickname || '',
+      expectedGuests: guest.expectedGuests || 1,
+      photos: guest.photos || [] 
+    });
     setEditingGuestId(guest._id);
     setGeneratedLink(`${window.location.origin}/invite/${guest.inviteCode}`);
   };
@@ -143,34 +159,32 @@ export default function AdminDashboard() {
     e.stopPropagation();
     const inviteUrl = `${window.location.origin}/invite/${guest.inviteCode}`;
     const message = `Namaste ${guest.fullName}, 🙏\n\nYou are cordially invited to celebrate the sacred union of Anukriti & Digvijay! ✨\n\nPlease view your exclusive invitation and timeline here:\n${inviteUrl}\n\nWe eagerly await your gracious presence! 🪔`;
-    
     const encodedMessage = encodeURIComponent(message);
     const cleanPhone = guest.phone ? guest.phone.replace(/\D/g, '') : '';
-    
     window.open(`https://wa.me/${cleanPhone}?text=${encodedMessage}`, '_blank');
   };
 
-  const filteredGuests = guestsList.filter(g => g.fullName.toLowerCase().includes(guestSearch.toLowerCase()));
-  const filteredRsvps = guestsList.filter(g => {
-    if (rsvpFilter === 'all') return true;
-    return g.rsvpStatus === rsvpFilter;
-  });
+  // Search by Full Name OR Nickname
+  const filteredGuests = guestsList.filter(g => 
+    g.fullName.toLowerCase().includes(guestSearch.toLowerCase()) || 
+    (g.nickname && g.nickname.toLowerCase().includes(guestSearch.toLowerCase()))
+  );
+  
+  const filteredRsvps = guestsList.filter(g => rsvpFilter === 'all' ? true : g.rsvpStatus === rsvpFilter);
 
   const totalGuests = guestsList.length;
+  const totalExpectedHeadcount = guestsList.reduce((acc, g) => acc + (g.expectedGuests || 1), 0);
   const attendingCount = guestsList.filter(g => g.rsvpStatus === 'attending').length;
   const declinedCount = guestsList.filter(g => g.rsvpStatus === 'declined').length;
   const pendingCount = guestsList.filter(g => g.rsvpStatus === 'pending').length;
 
-  // --- DATE/TIME PARSING HELPERS ---
   const parseToNativeDate = (dateStr) => {
     if (!dateStr) return '';
     try {
       const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return '';
-      return d.toISOString().split('T')[0];
+      return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
     } catch { return ''; }
   };
-
   const parseToNativeTime = (timeStr) => {
     if (!timeStr) return '';
     const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
@@ -181,13 +195,11 @@ export default function AdminDashboard() {
     if (p.toUpperCase() === 'AM' && h === 12) h = 0;
     return `${h.toString().padStart(2, '0')}:${m}`;
   };
-
   const formatNativeDate = (yyyyMMdd) => {
     if (!yyyyMMdd) return '';
     const d = new Date(yyyyMMdd);
     return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   };
-
   const formatNativeTime = (hhmm) => {
     if (!hhmm) return '';
     let [h, m] = hhmm.split(':');
@@ -202,14 +214,12 @@ export default function AdminDashboard() {
     setNativeDate(val);
     setEventForm({ ...eventForm, date: formatNativeDate(val) });
   };
-
   const handleNativeTimeChange = (e) => {
     const val = e.target.value;
     setNativeTime(val);
     setEventForm({ ...eventForm, time: formatNativeTime(val) });
   };
 
-  // --- EVENT LOGIC ---
   const fetchEvents = async () => {
     try {
       const res = await axios.get(`${API_BASE}/events?inviteType=complete`);
@@ -222,15 +232,11 @@ export default function AdminDashboard() {
     try {
       if (editingEventId) {
         await axios.put(`${API_BASE}/admin/event/${editingEventId}`, eventForm, { headers: { 'x-admin-password': password } });
-        alert('Event updated successfully!');
       } else {
         await axios.post(`${API_BASE}/admin/event`, eventForm, { headers: { 'x-admin-password': password } });
-        alert('Event created successfully!');
       }
       setEventForm(initialEventForm);
-      setNativeDate('');
-      setNativeTime('');
-      setEditingEventId(null);
+      setNativeDate(''); setNativeTime(''); setEditingEventId(null);
       fetchEvents();
     } catch (error) { alert('Error saving event.'); }
   };
@@ -252,9 +258,7 @@ export default function AdminDashboard() {
 
   const cancelEventEdit = () => {
     setEventForm(initialEventForm);
-    setNativeDate('');
-    setNativeTime('');
-    setEditingEventId(null);
+    setNativeDate(''); setNativeTime(''); setEditingEventId(null);
   };
 
   const addEventColor = () => setEventForm({ ...eventForm, colorPalette: [...(eventForm.colorPalette || []), '#D4AF37'] });
@@ -283,101 +287,53 @@ export default function AdminDashboard() {
     try {
       await axios.post(`${API_BASE}/admin/toggle-keepalive`, { isEnabled: status }, { headers: { 'x-admin-password': password } });
       setKeepAliveStatus(status);
-      alert(`Keep-Alive is now ${status ? 'ON' : 'OFF'}`);
-    } catch (error) {
-      alert('Error toggling Keep-Alive. Check password or server.');
-    }
+    } catch (error) { alert('Error toggling Keep-Alive.'); }
   };
 
-  // --- RENDER LOGIN ---
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#2c1238] via-[#1a0922] to-[#2c1238] flex items-center justify-center p-4 relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           {[...Array(10)].map((_, i) => (
-            <motion.div key={i} initial={{ y: '105vh', x: `${Math.random() * 100}vw`, opacity: 0.3 }} animate={{ y: '-10vh', rotate: 360 }} transition={{ duration: Math.random() * 8 + 6, repeat: Infinity, ease: 'linear' }} className="absolute text-amber-500/30 text-xl">
-              ✨
-            </motion.div>
+            <motion.div key={i} initial={{ y: '105vh', x: `${Math.random() * 100}vw`, opacity: 0.3 }} animate={{ y: '-10vh', rotate: 360 }} transition={{ duration: Math.random() * 8 + 6, repeat: Infinity, ease: 'linear' }} className="absolute text-amber-500/30 text-xl">✨</motion.div>
           ))}
         </div>
         
-        <motion.form 
-          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-          onSubmit={handleLogin} 
-          className="bg-white/10 backdrop-blur-xl p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-white/20 relative z-10"
-        >
-          <div className="w-14 h-14 bg-gradient-to-br from-amber-300 to-amber-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg text-[#2c1238]">
-            <Crown size={28} />
-          </div>
+        <motion.form initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} onSubmit={handleLogin} className="bg-white/10 backdrop-blur-xl p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-white/20 relative z-10">
+          <div className="w-14 h-14 bg-gradient-to-br from-amber-300 to-amber-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg text-[#2c1238]"><Crown size={28} /></div>
           <h2 className="text-2xl font-serif font-bold text-white mb-2 text-center tracking-wide">Admin Portal</h2>
           <p className="text-xs text-white/60 text-center mb-6">Enter Password</p>
-
-          <input 
-            type="password" 
-            placeholder="Enter Secure Password" 
-            value={password} 
-            onChange={(e) => { setPassword(e.target.value); setLoginError(''); }}
-            className="w-full p-4 bg-white/5 border border-white/20 rounded-xl mb-4 outline-none focus:ring-2 focus:ring-amber-400 focus:bg-white/10 text-white placeholder-white/50 transition-all text-center tracking-widest font-mono" 
-          />
-
-          {loginError && (
-            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-rose-400 text-xs text-center mb-4 font-semibold">
-              {loginError}
-            </motion.p>
-          )}
-
-          <button 
-            type="submit" 
-            disabled={isLoggingIn}
-            className="w-full bg-gradient-to-r from-amber-400 to-amber-600 text-[#2c1238] p-4 rounded-xl font-bold hover:shadow-[0_0_20px_rgba(251,191,36,0.4)] transition-all uppercase tracking-widest text-sm disabled:opacity-50 cursor-pointer"
-          >
-            {isLoggingIn ? 'Verifying Key...' : 'Unlock Portal'}
-          </button>
+          <input type="password" placeholder="Enter Secure Password" value={password} onChange={(e) => { setPassword(e.target.value); setLoginError(''); }} className="w-full p-4 bg-white/5 border border-white/20 rounded-xl mb-4 outline-none focus:ring-2 focus:ring-amber-400 focus:bg-white/10 text-white placeholder-white/50 transition-all text-center tracking-widest font-mono" />
+          {loginError && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-rose-400 text-xs text-center mb-4 font-semibold">{loginError}</motion.p>}
+          <button type="submit" disabled={isLoggingIn} className="w-full bg-gradient-to-r from-amber-400 to-amber-600 text-[#2c1238] p-4 rounded-xl font-bold hover:shadow-[0_0_20px_rgba(251,191,36,0.4)] transition-all uppercase tracking-widest text-sm disabled:opacity-50 cursor-pointer">{isLoggingIn ? 'Verifying Key...' : 'Unlock Portal'}</button>
         </motion.form>
       </div>
     );
   }
 
-  // --- RENDER DASHBOARD ---
   return (
     <div className="min-h-screen bg-[#FAF8F5] flex flex-col md:flex-row font-sans">
-      
-      {/* --- SIDEBAR --- */}
       <div className="w-full md:w-72 bg-[#2c1238] shadow-2xl flex flex-col md:min-h-screen z-20 shrink-0 border-r border-gold/20 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
-        
         <div className="p-6 md:p-8 text-center md:text-left relative z-10 border-b border-white/10">
           <span className="text-[10px] uppercase tracking-[0.3em] text-amber-500/80 font-bold mb-1 block">Control Center</span>
           <div className="font-script text-4xl text-white">Anukriti <span className="text-amber-500">&</span> Digvijay</div>
         </div>
-
         <nav className="flex md:flex-col overflow-x-auto p-4 gap-2 relative z-10">
-          <button onClick={() => setActiveTab('guests')} className={`flex items-center gap-3 p-4 rounded-xl transition-all duration-300 font-medium ${activeTab === 'guests' ? 'bg-amber-500 text-[#2c1238] shadow-lg scale-105' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
-            <Users size={18} /> <span>Manage Guests</span>
-          </button>
-          <button onClick={() => setActiveTab('rsvps')} className={`flex items-center gap-3 p-4 rounded-xl transition-all duration-300 font-medium ${activeTab === 'rsvps' ? 'bg-amber-500 text-[#2c1238] shadow-lg scale-105' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
-            <MessageSquare size={18} /> <span>RSVP Responses</span>
-          </button>
-          <button onClick={() => setActiveTab('events')} className={`flex items-center gap-3 p-4 rounded-xl transition-all duration-300 font-medium ${activeTab === 'events' ? 'bg-amber-500 text-[#2c1238] shadow-lg scale-105' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
-            <Calendar size={18} /> <span>Event Timeline</span>
-          </button>
-          <button onClick={() => setActiveTab('settings')} className={`flex items-center gap-3 p-4 rounded-xl transition-all duration-300 font-medium ${activeTab === 'settings' ? 'bg-amber-500 text-[#2c1238] shadow-lg scale-105' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
-            <Power size={18} /> <span>Server Settings</span>
-          </button>
+          <button onClick={() => setActiveTab('guests')} className={`flex items-center gap-3 p-4 rounded-xl transition-all duration-300 font-medium ${activeTab === 'guests' ? 'bg-amber-500 text-[#2c1238] shadow-lg scale-105' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}><Users size={18} /> <span>Manage Guests</span></button>
+          <button onClick={() => setActiveTab('rsvps')} className={`flex items-center gap-3 p-4 rounded-xl transition-all duration-300 font-medium ${activeTab === 'rsvps' ? 'bg-amber-500 text-[#2c1238] shadow-lg scale-105' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}><MessageSquare size={18} /> <span>RSVP Responses</span></button>
+          <button onClick={() => setActiveTab('events')} className={`flex items-center gap-3 p-4 rounded-xl transition-all duration-300 font-medium ${activeTab === 'events' ? 'bg-amber-500 text-[#2c1238] shadow-lg scale-105' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}><Calendar size={18} /> <span>Event Timeline</span></button>
+          <button onClick={() => setActiveTab('settings')} className={`flex items-center gap-3 p-4 rounded-xl transition-all duration-300 font-medium ${activeTab === 'settings' ? 'bg-amber-500 text-[#2c1238] shadow-lg scale-105' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}><Power size={18} /> <span>Server Settings</span></button>
         </nav>
       </div>
 
-      {/* --- MAIN CONTENT AREA --- */}
       <div className="flex-1 p-4 md:p-10 w-full overflow-y-auto relative">
         <div className="fixed top-0 left-1/2 w-full h-96 bg-gradient-to-b from-amber-500/5 to-transparent pointer-events-none" />
 
         <AnimatePresence mode="wait">
-          
-          {/* --- GUESTS TAB --- */}
           {activeTab === 'guests' && (
             <motion.div key="guests" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-7xl mx-auto relative z-10">
               
-              {/* Form Column */}
               <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100 relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-400 to-amber-600" />
                 <div className="flex justify-between items-center mb-8">
@@ -389,14 +345,26 @@ export default function AdminDashboard() {
                 </div>
                 
                 <form onSubmit={handleSaveGuest} className="space-y-5">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Full Name</label>
-                    <input type="text" required className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all font-medium text-gray-900" value={guestForm.fullName} onChange={e => setGuestForm({...guestForm, fullName: e.target.value})} />
+                  <div className="grid grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Full Name</label>
+                      <input type="text" required className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all font-medium text-gray-900" value={guestForm.fullName} onChange={e => setGuestForm({...guestForm, fullName: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Nickname (Internal)</label>
+                      <input type="text" placeholder="Optional" className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all font-medium text-gray-900" value={guestForm.nickname} onChange={e => setGuestForm({...guestForm, nickname: e.target.value})} />
+                    </div>
                   </div>
                   
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Phone Number (Digits Only for WhatsApp)</label>
-                    <input type="tel" placeholder="919876543210" value={guestForm.phone || ''} onChange={handlePhoneChange} className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all font-medium text-gray-900" />
+                  <div className="grid grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Phone Number (Digits Only)</label>
+                      <input type="tel" placeholder="919876543210" value={guestForm.phone || ''} onChange={handlePhoneChange} className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all font-medium text-gray-900" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Expected Guests</label>
+                      <input type="number" min="1" required className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all font-medium text-gray-900" value={guestForm.expectedGuests} onChange={e => setGuestForm({...guestForm, expectedGuests: parseInt(e.target.value) || 1})} />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-5">
@@ -413,6 +381,7 @@ export default function AdminDashboard() {
                       </select>
                     </div>
                   </div>
+
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Access Tier</label>
                     <select className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-medium text-gray-900" value={guestForm.inviteType} onChange={e => setGuestForm({...guestForm, inviteType: e.target.value})}>
@@ -421,7 +390,7 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="flex items-center gap-3 py-2">
-                    <input type="checkbox" id="family" checked={guestForm.withFamily} onChange={e => setGuestForm({...guestForm, withFamily: e.target.checked})} className="w-5 h-5 text-amber-600 rounded border-gray-300 focus:ring-amber-500 accent-amber-500" />
+                    <input type="checkbox" id="family" checked={guestForm.withFamily} onChange={e => handleFamilyToggle(e.target.checked)} className="w-5 h-5 text-amber-600 rounded border-gray-300 focus:ring-amber-500 accent-amber-500" />
                     <label htmlFor="family" className="text-gray-700 font-medium cursor-pointer select-none">Include Family Members?</label>
                   </div>
 
@@ -443,7 +412,6 @@ export default function AdminDashboard() {
                     </div>
                   )}
 
-                  {/* Photos Section */}
                   <div className="bg-[#2c1238]/5 p-5 rounded-2xl border border-[#2c1238]/10 space-y-4 mt-4">
                     <div className="flex justify-between items-start">
                       <div>
@@ -475,58 +443,40 @@ export default function AdminDashboard() {
                 )}
               </div>
 
-              {/* List & Search Column */}
               <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100 flex flex-col h-[850px] relative overflow-hidden">
                 <div className="flex items-center justify-between mb-6">
                   <div>
                     <h2 className="text-2xl font-serif font-bold text-[#2c1238]">Guest Directory</h2>
-                    <p className="text-xs text-gray-500 uppercase tracking-widest mt-1">Total Invites: {guestsList.length}</p>
+                    <p className="text-xs text-gray-500 uppercase tracking-widest mt-1">Invites: <span className="font-bold text-gray-900">{totalGuests}</span> | Expected Headcount: <span className="font-bold text-amber-600">{totalExpectedHeadcount}</span></p>
                   </div>
                 </div>
                 <div className="relative mb-6">
                   <Search size={18} className="absolute left-4 top-3.5 text-gray-400" />
-                  <input type="text" placeholder="Search by name..." className="w-full pl-12 p-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 transition-all font-medium" value={guestSearch} onChange={e => setGuestSearch(e.target.value)} />
+                  <input type="text" placeholder="Search by name or nickname..." className="w-full pl-12 p-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 transition-all font-medium" value={guestSearch} onChange={e => setGuestSearch(e.target.value)} />
                 </div>
                 
                 <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-gray-200">
                   {filteredGuests.map(guest => (
-                    <div 
-                      key={guest._id} 
-                      onClick={() => handleEditGuestClick(guest)} 
-                      className="p-4 bg-white border border-gray-100 rounded-2xl hover:border-amber-400 hover:shadow-md flex justify-between items-center transition cursor-pointer group"
-                    >
+                    <div key={guest._id} onClick={() => handleEditGuestClick(guest)} className="p-4 bg-white border border-gray-100 rounded-2xl hover:border-amber-400 hover:shadow-md flex justify-between items-center transition cursor-pointer group">
                       <div className="flex-1 pr-4">
                         <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-gray-900 text-lg group-hover:text-[#2c1238] transition-colors">{guest.fullName}</h4>
-                          <span className="text-xs text-gray-400 font-mono">({guest.phone || 'No phone'})</span>
+                          <h4 className="font-bold text-gray-900 text-lg group-hover:text-[#2c1238] transition-colors">
+                            {guest.fullName} {guest.nickname && <span className="text-gray-400 font-normal italic">({guest.nickname})</span>}
+                          </h4>
                         </div>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                           <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${guest.side === 'bride' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{guest.side}</span>
                           <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{guest.inviteType}</span>
-                          {guest.withFamily && <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">+{guest.familyMembers?.length || 0} Family</span>}
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Expected: {guest.expectedGuests || 1}</span>
                           {guest.photos?.length > 0 && <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">📸 {guest.photos.length}</span>}
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        {/* WhatsApp Button with Official Logo SVG */}
-                        <button
-                          type="button"
-                          onClick={(e) => handleWhatsAppShare(e, guest)}
-                          title="Share Invite via WhatsApp"
-                          className="w-10 h-10 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white flex items-center justify-center transition shadow-sm"
-                        >
-                          <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
-                          </svg>
+                        <button type="button" onClick={(e) => handleWhatsAppShare(e, guest)} title="Share Invite via WhatsApp" className="w-10 h-10 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white flex items-center justify-center transition shadow-sm">
+                          <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
                         </button>
-                        {/* Delete Guest Button */}
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteGuest(e, guest._id)}
-                          title="Delete Guest"
-                          className="w-10 h-10 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white flex items-center justify-center transition shadow-sm"
-                        >
+                        <button type="button" onClick={(e) => handleDeleteGuest(e, guest._id)} title="Delete Guest" className="w-10 h-10 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white flex items-center justify-center transition shadow-sm">
                           <Trash2 size={16} />
                         </button>
                       </div>

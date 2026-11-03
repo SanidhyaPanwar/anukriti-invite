@@ -71,16 +71,41 @@ export default function WelcomeReveal() {
     ? "Son of Mrs. Santresh & Mr. Harendra Singh Poonia"
     : "Daughter of Mrs. Sanju & Dr. Indra Pal Singh Panwar";
 
-  // Helper for Cover & Card 1: Uses titles and "& Family"
+  // --- NEW CULTURAL NAMING ENGINE ---
+  const getFormattedBaseName = () => {
+    if (!guest || !guest.fullName) return "";
+
+    const trimmedName = guest.fullName.trim();
+    const nameParts = trimmedName.split(/\s+/);
+    const firstWord = nameParts[0];
+    const isSingleWord = nameParts.length === 1;
+
+    // Check if the name starts with a professional title (Dr., Capt., Prof.)
+    const hasProfTitle = firstWord.includes('.');
+
+    let prefix = "";
+    if (!hasProfTitle) {
+      prefix = guest.gender === "female" ? "Shrimati " : "Shri ";
+    }
+
+    let suffix = "";
+    // Append 'Ji' if it's a single word name without a professional title
+    if (isSingleWord && !hasProfTitle) {
+      suffix = " Ji";
+    }
+
+    return `${prefix}${trimmedName}${suffix}`;
+  };
+
+  // Helper for Cover & Card 1
   const getCoverGuestName = () => {
     if (!guest) return "";
-    // Determine the respectful title based on gender
-    const title = guest.gender === "female" ? "Smt." : "Shree";
-
+    const formattedName = getFormattedBaseName();
+    
     if (guest.withFamily) {
-      return `${title} ${guest.fullName} & Family`;
+      return `${formattedName} & Family`;
     }
-    return `${title} ${guest.fullName}`;
+    return formattedName;
   };
 
   // Helper for Card 3: Formats specific family member names naturally in the letter
@@ -90,9 +115,7 @@ export default function WelcomeReveal() {
       const names = guest.familyMembers.map((m) => m.name);
       if (names.length === 1) return ` along with ${names[0]}`;
       if (names.length === 2) return ` along with ${names[0]} and ${names[1]}`;
-      return ` along with ${names.slice(0, -1).join(", ")}, and ${
-        names[names.length - 1]
-      }`;
+      return ` along with ${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
     }
     if (guest.withFamily) {
       return " and your family";
@@ -718,8 +741,7 @@ export default function WelcomeReveal() {
                     Special Invitation For
                   </span>
                   <h3 className="text-2xl md:text-3xl font-serif font-bold text-lavender-950">
-                    Respected {guest.gender === "female" ? "Smt." : "Shree"}{" "}
-                    {guest.fullName},{" "}
+                    Respected {getFormattedBaseName()},
                   </h3>
                 </div>
 

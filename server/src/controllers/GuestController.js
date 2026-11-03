@@ -47,28 +47,30 @@ exports.getAllGuests = async (req, res) => {
     }
   };
 
-exports.createGuestRsvp = async (req, res) => {
+  exports.createGuestRsvp = async (req, res) => {
     try {
-        // Destructure the exact fields we sent from RSVP.jsx
-        const { attending, emotional_guess, wedding_mood, note } = req.body;
+        // Destructure dance_stamina from req.body
+        const { attending, emotional_guess, wedding_mood, song_request, dance_stamina, note } = req.body;
         
         const guest = await Guest.findOne({ inviteCode: req.params.inviteCode });
         if (!guest) {
           return res.status(404).json({ error: 'Guest not found' });
         }
     
-        // Update guest data
         guest.rsvpStatus = attending ? 'attending' : 'declined';
         
-        // Only save the fun details if they are actually attending
         if (attending) {
           guest.emotionalGuess = emotional_guess || '';
           guest.weddingMood = wedding_mood || '';
+          guest.songRequest = song_request || '';
+          guest.danceStamina = dance_stamina || ''; // <--- ADD THIS LINE
           guest.guestNote = note || '';
         } else {
           guest.emotionalGuess = '';
           guest.weddingMood = '';
-          guest.guestNote = note || ''; // They might still leave a note if they decline!
+          guest.songRequest = '';
+          guest.danceStamina = '';
+          guest.guestNote = note || '';
         }
     
         await guest.save();

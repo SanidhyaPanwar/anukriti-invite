@@ -2,11 +2,13 @@ const mongoose = require('mongoose');
 
 const guestSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
+  nickname: { type: String, default: '' },
   gender: { 
     type: String, 
     enum: ['male', 'female'], 
     required: true 
   },
+  expectedGuests: { type: Number, default: 1 },
   inviteCode: { type: String, required: true, unique: true },
   withFamily: { type: Boolean, default: false },
   familyMembers: [{ name: String, gender: String }],
@@ -15,6 +17,7 @@ const guestSchema = new mongoose.Schema({
   emotionalGuess: { type: String, default: '' },
   weddingMood: { type: String, default: '' },
   guestNote: { type: String, default: '' },
+  songRequest: { type: String, default: '' }, 
   phone: String,
   email: String,
   side: { 
