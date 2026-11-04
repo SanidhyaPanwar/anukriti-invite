@@ -42,5 +42,21 @@ router.post(
   );
 // Route for adding installment with file upload support
 // router.post('/admin/finance/expense/:expenseId/installment', adminAuth, upload.single('receipt'), expenseController.manageInstallment);
+// POST: Dedicated Image Upload Route
+router.post('/upload', upload.array('photos', 5), (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: "No files provided" });
+    }
+
+    // Cloudinary automatically attaches the secure URL to `file.path`
+    const photoUrls = req.files.map((file) => file.path);
+    
+    res.json({ success: true, urls: photoUrls });
+  } catch (error) {
+    console.error("Upload Error:", error);
+    res.status(500).json({ error: "Failed to upload images" });
+  }
+});
 
 module.exports = router;

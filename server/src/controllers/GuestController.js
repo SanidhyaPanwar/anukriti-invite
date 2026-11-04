@@ -3,14 +3,12 @@ const Guest = require('../models/Guest');
 // Admin: Create a new guest
 exports.createGuest = async (req, res) => {
   try {
-    // Generate a simple 8-character random invite code
-    const inviteCode = Math.random().toString(36).substring(2, 10);
-    
-    const newGuest = new Guest({ ...req.body, inviteCode });
+    // req.body now perfectly matches your Guest model, including photos: [...]
+    const newGuest = new Guest(req.body);
     await newGuest.save();
-    
-    res.status(201).json(newGuest);
+    res.status(201).json({ success: true, guest: newGuest });
   } catch (error) {
+    console.error("Create Guest Error:", error);
     res.status(400).json({ error: error.message });
   }
 };

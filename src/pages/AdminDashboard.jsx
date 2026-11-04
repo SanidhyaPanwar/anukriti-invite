@@ -104,6 +104,7 @@ export default function AdminDashboard() {
   const [editingExpenseId, setEditingExpenseId] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [viewingInstallment, setViewingInstallment] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
 
   const [expenseData, setExpenseData] = useState({
     expenses: [],
@@ -132,6 +133,7 @@ export default function AdminDashboard() {
   const [sideFilter, setSideFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("pending-desc");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleVerifyFinancePin = async (e) => {
     e.preventDefault();
@@ -204,6 +206,62 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      let finalPhotoUrls = [...(guestForm.photos || [])];
+
+      // Step A: If new files were selected, upload them first
+      if (selectedFiles.length > 0) {
+        const uploadData = new FormData();
+        selectedFiles.forEach((file) => {
+          uploadData.append("photos", file);
+        });
+
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: uploadData,
+        });
+
+        const uploadResult = await uploadRes.json();
+        if (!uploadRes.ok)
+          throw new Error(uploadResult.error || "Upload failed");
+
+        // Merge newly generated Cloudinary URLs
+        finalPhotoUrls = [...finalPhotoUrls, ...uploadResult.urls];
+      }
+
+      // Step B: Submit Guest Object as standard JSON
+      const payload = {
+        ...guestForm,
+        photos: finalPhotoUrls,
+      };
+
+      const isEdit = Boolean(guestForm._id);
+      const endpoint = isEdit
+        ? `/api/admin/guests/${guestForm._id}`
+        : "/api/admin/guests";
+      const method = isEdit ? "PUT" : "POST";
+
+      const res = await fetch(endpoint, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error("Failed to save guest");
+
+      setSelectedFiles([]); // Reset file state
+      onSuccess();
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!password) return;
@@ -213,7 +271,7 @@ export default function AdminDashboard() {
       await axios.post(
         `${API_BASE}/admin/verify`,
         {},
-        { headers: { "x-admin-password": password } }
+        { headers: { "x-admin-password": password } },
       );
       setIsAuthenticated(true);
     } catch (error) {
@@ -323,7 +381,7 @@ export default function AdminDashboard() {
     link.setAttribute("href", encodedUri);
     link.setAttribute(
       "download",
-      `Wedding_Expense_Ledger_${new Date().toISOString().slice(0, 10)}.csv`
+      `Wedding_Expense_Ledger_${new Date().toISOString().slice(0, 10)}.csv`,
     );
     document.body.appendChild(link);
     link.click();
@@ -363,6 +421,26 @@ export default function AdminDashboard() {
     }));
   };
 
+  // Handle selecting new files from device
+  const handleFileSelect = (e) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files);
+      setSelectedFiles((prev) => [...prev, ...newFiles]);
+    }
+  };
+
+  // Remove a local file that hasn't been uploaded yet
+  const removeSelectedFile = (indexToRemove) => {
+    setSelectedFiles((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  // Remove an existing Cloudinary URL
+  const removeExistingPhoto = (indexToRemove) => {
+    setGuestForm((prev) => ({
+      ...prev,
+      photos: prev.photos.filter((_, idx) => idx !== indexToRemove),
+    }));
+  };
   const addPhoto = () =>
     setGuestForm({ ...guestForm, photos: [...(guestForm.photos || []), ""] });
   const updatePhoto = (index, value) => {
@@ -382,26 +460,77 @@ export default function AdminDashboard() {
 
   const handleSaveGuest = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
+
+    const API_BASE_URL =
+      import.meta.env.VITE_API_BASE_URL;
+
     try {
-      if (editingGuestId) {
-        await axios.put(
-          `${API_BASE}/admin/guest/${editingGuestId}`,
-          guestForm,
-          { headers: { "x-admin-password": password } }
-        );
-      } else {
-        const res = await axios.post(`${API_BASE}/admin/guest`, guestForm, {
-          headers: { "x-admin-password": password },
+      let uploadedUrls = [...(guestForm.photos || [])];
+
+      // Step 1: Upload new local files if selected
+      if (selectedFiles && selectedFiles.length > 0) {
+        const uploadFormData = new FormData();
+        Array.from(selectedFiles).forEach((file) => {
+          uploadFormData.append("photos", file);
         });
-        setGeneratedLink(
-          `${window.location.origin}/invite/${res.data.inviteCode}`
-        );
+
+        const uploadRes = await fetch(`${API_BASE_URL}/upload`, {
+          method: "POST",
+          body: uploadFormData,
+        });
+
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) {
+          throw new Error(uploadData.error || "Photo upload failed");
+        }
+
+        // Append newly returned Cloudinary URLs
+        uploadedUrls = [...uploadedUrls, ...(uploadData.urls || [])];
       }
-      setGuestForm(initialGuestForm);
-      setEditingGuestId(null);
-      fetchGuests();
+
+      // Step 2: Submit Guest details as standard JSON
+      const guestPayload = {
+        ...guestForm,
+        photos: uploadedUrls,
+      };
+
+      const isEdit = Boolean(guestForm._id);
+      const endpoint = isEdit
+        ? `${API_BASE_URL}/admin/guest/${guestForm._id}`
+        : `${API_BASE_URL}/admin/guest`;
+      const method = isEdit ? "PUT" : "POST";
+
+      const saveRes = await fetch(endpoint, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-password": password,
+        },
+        body: JSON.stringify(guestPayload),
+      });
+
+      const saveData = await saveRes.json();
+      if (!saveRes.ok) {
+        throw new Error(saveData.error || "Failed to save guest");
+      }
+
+      // Reset selected local files on success
+      if (typeof setSelectedFiles === "function") {
+        setSelectedFiles([]);
+      }
+
+      if (typeof onSuccess === "function") {
+        onSuccess(saveData.guest || saveData);
+      }
+      if (typeof onClose === "function") {
+        onClose();
+      }
     } catch (error) {
-      alert("Error saving guest.");
+      console.error("Error saving guest:", error);
+      alert(error.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -462,7 +591,7 @@ export default function AdminDashboard() {
   const handleExportDJList = () => {
     // Filter guests who actually requested a song
     const guestsWithSongs = guestsList.filter(
-      (g) => g.songRequest && g.songRequest.trim() !== ""
+      (g) => g.songRequest && g.songRequest.trim() !== "",
     );
 
     if (guestsWithSongs.length === 0) {
@@ -497,26 +626,26 @@ export default function AdminDashboard() {
     (g) =>
       g.fullName.toLowerCase().includes(guestSearch.toLowerCase()) ||
       (g.nickname &&
-        g.nickname.toLowerCase().includes(guestSearch.toLowerCase()))
+        g.nickname.toLowerCase().includes(guestSearch.toLowerCase())),
   );
 
   const filteredRsvps = guestsList.filter((g) =>
-    rsvpFilter === "all" ? true : g.rsvpStatus === rsvpFilter
+    rsvpFilter === "all" ? true : g.rsvpStatus === rsvpFilter,
   );
 
   const totalGuests = guestsList.length;
   const totalExpectedHeadcount = guestsList.reduce(
     (acc, g) => acc + (g.expectedGuests || 1),
-    0
+    0,
   );
   const attendingCount = guestsList.filter(
-    (g) => g.rsvpStatus === "attending"
+    (g) => g.rsvpStatus === "attending",
   ).length;
   const declinedCount = guestsList.filter(
-    (g) => g.rsvpStatus === "declined"
+    (g) => g.rsvpStatus === "declined",
   ).length;
   const pendingCount = guestsList.filter(
-    (g) => g.rsvpStatus === "pending"
+    (g) => g.rsvpStatus === "pending",
   ).length;
 
   const parseToNativeDate = (dateStr) => {
@@ -583,7 +712,7 @@ export default function AdminDashboard() {
         await axios.put(
           `${API_BASE}/admin/event/${editingEventId}`,
           eventForm,
-          { headers: { "x-admin-password": password } }
+          { headers: { "x-admin-password": password } },
         );
       } else {
         await axios.post(`${API_BASE}/admin/event`, eventForm, {
@@ -638,7 +767,7 @@ export default function AdminDashboard() {
   };
   const removeEventColor = (index) => {
     const updated = (eventForm.colorPalette || []).filter(
-      (_, i) => i !== index
+      (_, i) => i !== index,
     );
     setEventForm({ ...eventForm, colorPalette: updated });
   };
@@ -663,7 +792,7 @@ export default function AdminDashboard() {
       await axios.post(
         `${API_BASE}/admin/toggle-keepalive`,
         { isEnabled: status },
-        { headers: { "x-admin-password": password } }
+        { headers: { "x-admin-password": password } },
       );
       setKeepAliveStatus(status);
     } catch (error) {
@@ -1209,36 +1338,79 @@ export default function AdminDashboard() {
                           Cherished Memories
                         </h3>
                         <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">
-                          Paste direct image URLs
+                          Upload photos directly from your device
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={addPhoto}
-                        className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded-lg text-[#2c1238] font-bold hover:border-amber-500 transition shadow-sm"
-                      >
-                        + Add Photo
-                      </button>
-                    </div>
-                    {(guestForm.photos || []).map((photo, idx) => (
-                      <div key={idx} className="flex gap-2 items-center">
+
+                      {/* File Input Trigger */}
+                      <label className="cursor-pointer text-xs bg-white border border-gray-200 px-3 py-1.5 rounded-lg text-[#2c1238] font-bold hover:border-amber-500 transition shadow-sm inline-flex items-center gap-1">
+                        + Select Photos
                         <input
-                          type="url"
-                          placeholder="https://example.com/image.jpg"
-                          required
-                          className="flex-1 p-3 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:border-amber-500"
-                          value={photo}
-                          onChange={(e) => updatePhoto(idx, e.target.value)}
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={handleFileSelect}
                         />
-                        <button
-                          type="button"
-                          onClick={() => removePhoto(idx)}
-                          className="text-gray-400 hover:text-red-500 p-2 transition"
+                      </label>
+                    </div>
+
+                    {/* Image Previews Grid */}
+                    <div className="grid grid-cols-3 gap-3 pt-2">
+                      {/* 1. Render Already Saved Cloudinary Photos */}
+                      {(guestForm.photos || []).map((url, idx) => (
+                        <div
+                          key={`existing-${idx}`}
+                          className="relative group aspect-square rounded-xl overflow-hidden border border-gray-200 bg-white"
                         >
-                          &times;
-                        </button>
-                      </div>
-                    ))}
+                          <img
+                            src={url}
+                            alt={`Saved ${idx}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeExistingPhoto(idx)}
+                            className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-90 hover:bg-red-600 transition"
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      ))}
+
+                      {/* 2. Render Newly Selected Local Files */}
+                      {selectedFiles.map((file, idx) => (
+                        <div
+                          key={`new-${idx}`}
+                          className="relative group aspect-square rounded-xl overflow-hidden border-2 border-amber-500/50 bg-white"
+                        >
+                          <img
+                            src={URL.createObjectURL(file)}
+                            alt={`Preview ${idx}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <span className="absolute bottom-1 left-1 bg-amber-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                            New
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeSelectedFile(idx)}
+                            className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-90 hover:bg-red-600 transition"
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Empty State */}
+                    {(guestForm.photos || []).length === 0 &&
+                      selectedFiles.length === 0 && (
+                        <p className="text-xs text-gray-400 text-center py-4 border-2 border-dashed border-gray-200 rounded-xl">
+                          No photos added yet. Click "+ Select Photos" to add
+                          some.
+                        </p>
+                      )}
                   </div>
 
                   <button
@@ -1411,7 +1583,7 @@ export default function AdminDashboard() {
                       {tab} (
                       {
                         guestsList.filter(
-                          (g) => tab === "all" || g.rsvpStatus === tab
+                          (g) => tab === "all" || g.rsvpStatus === tab,
                         ).length
                       }
                       )
@@ -1474,8 +1646,8 @@ export default function AdminDashboard() {
                                   guest.rsvpStatus === "attending"
                                     ? "bg-emerald-100 text-emerald-800"
                                     : guest.rsvpStatus === "declined"
-                                    ? "bg-rose-100 text-rose-800"
-                                    : "bg-amber-100 text-amber-800"
+                                      ? "bg-rose-100 text-rose-800"
+                                      : "bg-amber-100 text-amber-800"
                                 }`}
                               >
                                 {guest.rsvpStatus}
@@ -2197,7 +2369,7 @@ export default function AdminDashboard() {
                               expenseForm,
                               {
                                 headers: { "x-admin-password": password },
-                              }
+                              },
                             );
                             setExpenseForm({
                               expenseName: "",
@@ -2376,11 +2548,11 @@ export default function AdminDashboard() {
                             const paidSum = exp.installments.reduce(
                               (acc, i) =>
                                 i.status === "Paid" ? acc + i.amount : acc,
-                              0
+                              0,
                             );
                             const progress = Math.min(
                               100,
-                              Math.round((paidSum / exp.totalAmount) * 100)
+                              Math.round((paidSum / exp.totalAmount) * 100),
                             );
 
                             return (
@@ -2437,7 +2609,7 @@ export default function AdminDashboard() {
                                       onClick={async () => {
                                         if (
                                           window.confirm(
-                                            `Are you sure you want to delete "${exp.expenseName}"?`
+                                            `Are you sure you want to delete "${exp.expenseName}"?`,
                                           )
                                         ) {
                                           try {
@@ -2447,7 +2619,7 @@ export default function AdminDashboard() {
                                                 headers: {
                                                   "x-admin-password": password,
                                                 },
-                                              }
+                                              },
                                             );
                                             fetchExpenses();
                                           } catch (err) {
@@ -2512,7 +2684,7 @@ export default function AdminDashboard() {
                                               window.open(
                                                 inst.receiptUrl,
                                                 "_blank",
-                                                "noreferrer"
+                                                "noreferrer",
                                               );
                                             }}
                                             className="text-indigo-600 font-bold hover:underline flex items-center gap-0.5 ml-1"
@@ -2588,7 +2760,7 @@ export default function AdminDashboard() {
                             <span className="font-bold text-gray-800 text-sm">
                               {viewingInstallment.installment.dueDate
                                 ? new Date(
-                                    viewingInstallment.installment.dueDate
+                                    viewingInstallment.installment.dueDate,
                                   ).toLocaleDateString()
                                 : "N/A"}
                             </span>
@@ -2602,7 +2774,7 @@ export default function AdminDashboard() {
                             </span>
                             <span className="font-bold text-gray-800 text-sm">
                               {new Date(
-                                viewingInstallment.installment.paidDate
+                                viewingInstallment.installment.paidDate,
                               ).toLocaleDateString()}
                             </span>
                           </div>
@@ -2671,7 +2843,7 @@ export default function AdminDashboard() {
                               await axios.put(
                                 `${API_BASE}/admin/finance/expense/${editingExpenseId}`,
                                 expenseForm,
-                                { headers: { "x-admin-password": password } }
+                                { headers: { "x-admin-password": password } },
                               );
                               setIsEditModalOpen(false);
                               setEditingExpenseId(null);
@@ -2811,14 +2983,14 @@ export default function AdminDashboard() {
                             formData.append("dueDate", installmentForm.dueDate);
                             formData.append(
                               "paidDate",
-                              installmentForm.paidDate
+                              installmentForm.paidDate,
                             );
                             formData.append("status", installmentForm.status);
                             formData.append("note", installmentForm.note);
                             if (installmentForm.receipt) {
                               formData.append(
                                 "receipt",
-                                installmentForm.receipt
+                                installmentForm.receipt,
                               );
                             }
 
@@ -2831,7 +3003,7 @@ export default function AdminDashboard() {
                                     "x-admin-password": password,
                                     "Content-Type": "multipart/form-data",
                                   },
-                                }
+                                },
                               );
                               setInstallmentForm({
                                 amount: "",
@@ -2997,7 +3169,7 @@ export default function AdminDashboard() {
                                 const paid = exp.installments.reduce(
                                   (sum, i) =>
                                     i.status === "Paid" ? sum + i.amount : sum,
-                                  0
+                                  0,
                                 );
                                 catMap[exp.category].Paid += paid;
                                 catMap[exp.category].Pending +=

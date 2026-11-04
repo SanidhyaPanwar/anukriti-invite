@@ -31,6 +31,9 @@ export default function WelcomeReveal() {
     secs: "00",
   });
 
+  // Photo Enlargement State
+  const [previewModalUrl, setPreviewModalUrl] = useState(null);
+
   // References for Canvas elements
   const canvasRef1 = useRef(null);
   const canvasRef2 = useRef(null);
@@ -780,12 +783,13 @@ export default function WelcomeReveal() {
                       {guest.photos.map((photoUrl, idx) => (
                         <div
                           key={idx}
-                          className="relative rounded-2xl overflow-hidden shadow-sm border border-gold/30 aspect-square"
+                          className="relative rounded-2xl overflow-hidden shadow-sm border border-gold/30 aspect-square cursor-pointer group"
+                          onClick={() => setPreviewModalUrl(photoUrl)}
                         >
                           <img
                             src={photoUrl}
                             alt="Memory"
-                            className="w-full h-full object-cover transform hover:scale-110 transition duration-500"
+                            className="w-full h-full object-cover transform group-hover:scale-110 transition duration-500"
                           />
                         </div>
                       ))}
@@ -797,6 +801,41 @@ export default function WelcomeReveal() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Fullscreen Enlarge Image Modal */}
+      <AnimatePresence>
+        {previewModalUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[99999] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setPreviewModalUrl(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="relative max-w-4xl max-h-[90vh] rounded-2xl overflow-hidden shadow-2xl border border-white/20"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setPreviewModalUrl(null)}
+                className="absolute top-3 right-3 bg-black/70 hover:bg-red-600 text-white w-10 h-10 rounded-full flex items-center justify-center text-xl font-bold transition z-10 shadow-lg"
+              >
+                &times;
+              </button>
+              <img
+                src={previewModalUrl}
+                alt="Enlarged Memory"
+                className="max-w-full max-h-[85vh] object-contain rounded-2xl"
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
