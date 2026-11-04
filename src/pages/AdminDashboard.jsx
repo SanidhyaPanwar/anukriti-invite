@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from "axios";
 import {
   Users,
@@ -21,8 +21,22 @@ import {
   MessageSquare,
   Trash2,
   LayoutDashboard,
+  ShieldCheck,
+  Lock,
   Server,
 } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function AdminDashboard() {
@@ -81,6 +95,82 @@ export default function AdminDashboard() {
   const [keepAliveStatus, setKeepAliveStatus] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // --- FINANCE / EXPENSE STATE ---
+  const [isFinanceAuthenticated, setIsFinanceAuthenticated] = useState(false);
+  const [financePin, setFinancePin] = useState("");
+  const [financeError, setFinanceError] = useState("");
+  const [isVerifyingPin, setIsVerifyingPin] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  const [expenseData, setExpenseData] = useState({
+    expenses: [],
+    summary: { totalBudget: 0, totalPaid: 0, totalPending: 0 },
+  });
+  const [expenseForm, setExpenseForm] = useState({
+    expenseName: "",
+    category: "Venue",
+    totalAmount: "",
+    vendorContact: "",
+    side: "Both",
+  });
+  const [selectedExpenseForInstallment, setSelectedExpenseForInstallment] =
+    useState(null);
+  const [installmentForm, setInstallmentForm] = useState({
+    amount: "",
+    dueDate: "",
+    paidDate: "",
+    status: "Pending",
+    note: "",
+    receipt: null, // File object for upload
+  });
+
+  // --- FILTER & SEARCH STATES ---
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [sideFilter, setSideFilter] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredExpenses = expenseData.expenses.filter((exp) => {
+    const matchesCategory =
+      categoryFilter === "All" || exp.category === categoryFilter;
+    const matchesSide = sideFilter === "All" || exp.side === sideFilter;
+    const matchesSearch = exp.expenseName
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSide && matchesSearch;
+  });
+
+  const handleVerifyFinancePin = async (e) => {
+    e.preventDefault();
+    if (!financePin) return;
+    setIsVerifyingPin(true);
+    setFinanceError("");
+    try {
+      const res = await axios.post(`${API_BASE}/admin/finance/verify-pin`, {
+        pin: financePin,
+      });
+      if (res.data.success) {
+        setIsFinanceAuthenticated(true);
+        fetchExpenses();
+      }
+    } catch (error) {
+      setFinanceError("Invalid Financial PIN. Access Denied.");
+    } finally {
+      setIsVerifyingPin(false);
+    }
+  };
+
+  const fetchExpenses = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/admin/finance/expenses`, {
+        headers: { "x-admin-password": password },
+      });
+      setExpenseData(res.data);
+    } catch (error) {
+      console.error("Error fetching expenses:", error);
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -145,6 +235,93 @@ export default function AdminDashboard() {
       expectedGuests: Math.max(1, prev.expectedGuests - 1),
     }));
   };
+
+  const exportToCSV = () => {
+    const headers = [
+      "Expense Name",
+      "Category",
+      "Side",
+      "Total Amount",
+      "Installment Amount",
+      "Status",
+      "Due Date",
+      "Paid Date",
+      "Note",
+      "Receipt URL",
+    ];
+    const rows = [];
+
+    expenseData.expenses.forEach((exp) => {
+      if (!exp.installments || exp.installments.length === 0) {
+        rows.push([
+          `"${exp.expenseName}"`,
+          `"${exp.category}"`,
+          `"${exp.side || "Both"}"`,
+          exp.totalAmount,
+          0,
+          "No Installments",
+          "",
+          "",
+          "",
+          "",
+        ]);
+      } else {
+        exp.installments.forEach((inst) => {
+          rows.push([
+            `"${exp.expenseName}"`,
+            `"${exp.category}"`,
+            `"${exp.side || "Both"}"`,
+            exp.totalAmount,
+            inst.amount,
+            inst.status,
+            inst.dueDate ? new Date(inst.dueDate).toLocaleDateString() : "",
+            inst.paidDate ? new Date(inst.paidDate).toLocaleDateString() : "",
+            `"${inst.note || ""}"`,
+            `"${inst.receiptUrl || ""}"`,
+          ]);
+        });
+      }
+    });
+
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute(
+      "download",
+      `Wedding_Expense_Ledger_${new Date().toISOString().slice(0, 10)}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const upcomingDues = React.useMemo(() => {
+    const now = new Date();
+    const sevenDaysFromNow = new Date();
+    sevenDaysFromNow.setDate(now.getDate() + 7);
+
+    const dues = [];
+    expenseData.expenses.forEach((exp) => {
+      exp.installments.forEach((inst) => {
+        if (inst.status === "Pending" && inst.dueDate) {
+          const dueDateObj = new Date(inst.dueDate);
+          if (dueDateObj <= sevenDaysFromNow) {
+            dues.push({
+              expenseName: exp.expenseName,
+              category: exp.category,
+              amount: inst.amount,
+              dueDate: inst.dueDate,
+              isOverdue: dueDateObj < now,
+            });
+          }
+        }
+      });
+    });
+    return dues;
+  }, [expenseData.expenses]);
 
   const handleFamilyToggle = (checked) => {
     setGuestForm((prev) => ({
@@ -595,6 +772,16 @@ export default function AdminDashboard() {
             }`}
           >
             <Power size={18} /> <span>Server Settings</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("finance")}
+            className={`flex items-center gap-3 p-4 rounded-xl transition-all duration-300 font-medium ${
+              activeTab === "finance"
+                ? "bg-amber-500 text-[#2c1238] shadow-lg scale-105"
+                : "text-white/70 hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            <ShieldCheck size={18} /> <span>Expense Tracker</span>
           </button>
         </nav>
       </div>
@@ -1803,6 +1990,953 @@ export default function AdminDashboard() {
                   </button>
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {activeTab === "finance" && (
+            <motion.div
+              key="finance"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="max-w-7xl mx-auto space-y-8 relative z-10"
+            >
+              {!isFinanceAuthenticated ? (
+                /* --- SECONDARY SECURITY PIN GATE --- */
+                <div className="flex items-center justify-center min-h-[60vh]">
+                  <motion.form
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    onSubmit={handleVerifyFinancePin}
+                    className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md border border-gray-100 text-center relative overflow-hidden"
+                  >
+                    <div className="w-16 h-16 bg-gradient-to-br from-purple-100 to-purple-200 rounded-full flex items-center justify-center mx-auto mb-4 text-[#2c1238] shadow-inner">
+                      <Lock size={30} />
+                    </div>
+                    <h2 className="text-2xl font-serif font-bold text-[#2c1238] mb-1">
+                      Financial Vault
+                    </h2>
+                    <p className="text-xs text-gray-400 uppercase tracking-widest mb-6">
+                      Enter Secondary Security PIN
+                    </p>
+
+                    <input
+                      type="password"
+                      placeholder="Enter Financial PIN"
+                      value={financePin}
+                      onChange={(e) => {
+                        setFinancePin(e.target.value);
+                        setFinanceError("");
+                      }}
+                      className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl mb-4 outline-none focus:ring-2 focus:ring-amber-500 text-center text-lg tracking-widest font-mono"
+                    />
+                    {financeError && (
+                      <p className="text-rose-500 text-xs font-semibold mb-4">
+                        {financeError}
+                      </p>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={isVerifyingPin}
+                      className="w-full bg-[#2c1238] text-white p-4 rounded-xl font-bold hover:bg-[#1a0922] transition-colors uppercase tracking-widest text-sm shadow-lg cursor-pointer"
+                    >
+                      {isVerifyingPin ? "Verifying..." : "Unlock Vault"}
+                    </button>
+                  </motion.form>
+                </div>
+              ) : (
+                /* --- UNLOCKED FINANCE DASHBOARD --- */
+                <div className="space-y-8">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-3xl font-serif font-bold text-[#2c1238]">
+                        Wedding Expense Tracker
+                      </h2>
+                      <p className="text-xs text-gray-500 uppercase tracking-widest mt-1">
+                        Manage budgets, vendor installments & receipts
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={exportToCSV}
+                        className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold transition flex items-center gap-2 shadow-sm cursor-pointer"
+                      >
+                        📥 Export CSV
+                      </button>
+                      <button
+                        onClick={() => setIsFinanceAuthenticated(false)}
+                        className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-xl font-bold transition cursor-pointer"
+                      >
+                        Lock Vault 🔒
+                      </button>
+                    </div>
+                  </div>
+                  {/* Upcoming Dues Alert Banner */}
+                  {upcomingDues.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-300 rounded-3xl p-5 shadow-sm space-y-3">
+                      <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
+                        <span className="text-lg">⚠️</span>
+                        <span>
+                          Payment Alerts ({upcomingDues.length} Pending Dues)
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {upcomingDues.map((due, idx) => (
+                          <div
+                            key={idx}
+                            className={`p-3 rounded-2xl border text-xs flex justify-between items-center ${
+                              due.isOverdue
+                                ? "bg-rose-50 border-rose-200 text-rose-900"
+                                : "bg-white border-amber-200 text-amber-900"
+                            }`}
+                          >
+                            <div>
+                              <p className="font-bold">{due.expenseName}</p>
+                              <p className="text-[10px] opacity-75">
+                                Due:{" "}
+                                {new Date(due.dueDate).toLocaleDateString()}{" "}
+                                {due.isOverdue && "⚠️ (OVERDUE)"}
+                              </p>
+                            </div>
+                            <span className="font-bold text-sm">
+                              ₹{due.amount.toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* Summary Overview Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-white rounded-3xl p-6 shadow-xl border border-gray-100 flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-xl">
+                        💰
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-widest text-gray-400 font-bold">
+                          Total Budget
+                        </p>
+                        <h3 className="text-3xl font-bold text-gray-900">
+                          ₹{expenseData.summary.totalBudget.toLocaleString()}
+                        </h3>
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-3xl p-6 shadow-xl border border-gray-100 flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xl">
+                        ✅
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-widest text-gray-400 font-bold">
+                          Total Paid
+                        </p>
+                        <h3 className="text-3xl font-bold text-emerald-700">
+                          ₹{expenseData.summary.totalPaid.toLocaleString()}
+                        </h3>
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-3xl p-6 shadow-xl border border-gray-100 flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-xl">
+                        ⏳
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-widest text-gray-400 font-bold">
+                          Pending Dues
+                        </p>
+                        <h3 className="text-3xl font-bold text-rose-700">
+                          ₹{expenseData.summary.totalPending.toLocaleString()}
+                        </h3>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expense List & Quick Add Form Section */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Add Expense Form */}
+                    <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100 h-fit">
+                      <h3 className="text-xl font-serif font-bold text-[#2c1238] mb-4">
+                        Add New Expense
+                      </h3>
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          try {
+                            await axios.post(
+                              `${API_BASE}/admin/finance/expense`,
+                              expenseForm,
+                              {
+                                headers: { "x-admin-password": password },
+                              }
+                            );
+                            setExpenseForm({
+                              expenseName: "",
+                              category: "Venue",
+                              totalAmount: "",
+                              vendorContact: "",
+                              side: "Both",
+                            });
+                            fetchExpenses();
+                          } catch (err) {
+                            alert("Error adding expense");
+                          }
+                        }}
+                        className="space-y-4"
+                      >
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                            Expense / Vendor Name
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g., Grand Palace Venue"
+                            value={expenseForm.expenseName}
+                            onChange={(e) =>
+                              setExpenseForm({
+                                ...expenseForm,
+                                expenseName: e.target.value,
+                              })
+                            }
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none font-medium text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                            Category
+                          </label>
+                          <select
+                            value={expenseForm.category}
+                            onChange={(e) =>
+                              setExpenseForm({
+                                ...expenseForm,
+                                category: e.target.value,
+                              })
+                            }
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none font-medium text-sm"
+                          >
+                            {[
+                              "Venue",
+                              "Food & Catering",
+                              "Hotel & Stay",
+                              "Transport",
+                              "Gifts",
+                              "Decor",
+                              "Photography",
+                              "Others",
+                            ].map((cat) => (
+                              <option key={cat} value={cat}>
+                                {cat}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                            Total Agreed Amount (₹)
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            placeholder="500000"
+                            value={expenseForm.totalAmount}
+                            onChange={(e) =>
+                              setExpenseForm({
+                                ...expenseForm,
+                                totalAmount: e.target.value,
+                              })
+                            }
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none font-medium text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                            Vendor Contact (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="9876543210"
+                            value={expenseForm.vendorContact}
+                            onChange={(e) =>
+                              setExpenseForm({
+                                ...expenseForm,
+                                vendorContact: e.target.value,
+                              })
+                            }
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none font-medium text-sm"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          className="w-full bg-[#2c1238] text-white p-3.5 rounded-xl font-bold uppercase tracking-widest text-xs shadow-md hover:bg-[#1a0922] transition"
+                        >
+                          Create Expense Ledger
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* Expenses Table / Directory */}
+                    <div className="lg:col-span-2 bg-white rounded-3xl shadow-xl p-8 border border-gray-100">
+                      <h3 className="text-xl font-serif font-bold text-[#2c1238] mb-6">
+                        Expense Records & Installments
+                      </h3>
+                      {/* Filter Control Bar */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-200">
+                                    {/* Search input */}
+                                    <input
+                                      type="text"
+                                      placeholder="Search vendor or expense..."
+                                      value={searchQuery}
+                                      onChange={(e) =>
+                                        setSearchQuery(e.target.value)
+                                      }
+                                      className="p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-amber-500"
+                                    />
+
+                                    {/* Category Filter */}
+                                    <select
+                                      value={categoryFilter}
+                                      onChange={(e) =>
+                                        setCategoryFilter(e.target.value)
+                                      }
+                                      className="p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium outline-none"
+                                    >
+                                      <option value="All">
+                                        All Categories
+                                      </option>
+                                      {[
+                                        "Venue",
+                                        "Food & Catering",
+                                        "Hotel & Stay",
+                                        "Transport",
+                                        "Decor",
+                                        "Photography",
+                                        "Others",
+                                      ].map((cat) => (
+                                        <option key={cat} value={cat}>
+                                          {cat}
+                                        </option>
+                                      ))}
+                                    </select>
+
+                                    {/* Side Filter */}
+                                    <select
+                                      value={sideFilter}
+                                      onChange={(e) =>
+                                        setSideFilter(e.target.value)
+                                      }
+                                      className="p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium outline-none"
+                                    >
+                                      <option value="All">
+                                        All Sides (Bride & Groom)
+                                      </option>
+                                      <option value="Bride">Bride Side</option>
+                                      <option value="Groom">Groom Side</option>
+                                      <option value="Both">
+                                        Shared / Both
+                                      </option>
+                                    </select>
+                                  </div>
+                      <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                        {expenseData.expenses.length === 0 ? (
+                          <p className="text-gray-400 italic text-center py-10">
+                            No expenses recorded yet.
+                          </p>
+                        ) : (
+                          filteredExpenses.map((exp) => {
+                            const paidSum = exp.installments.reduce(
+                              (acc, i) =>
+                                i.status === "Paid" ? acc + i.amount : acc,
+                              0
+                            );
+                            const progress = Math.min(
+                              100,
+                              Math.round((paidSum / exp.totalAmount) * 100)
+                            );
+
+                            return (
+                              <div
+                                key={exp._id}
+                                className="p-5 bg-gray-50/50 border border-gray-200 rounded-2xl space-y-3"
+                              >
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full">
+                                      {exp.category}
+                                    </span>
+                                    <h4 className="font-bold text-gray-900 text-lg mt-1">
+                                      {exp.expenseName}
+                                    </h4>
+                                    {exp.vendorContact && (
+                                      <p className="text-xs text-gray-500 mt-0.5">
+                                        📞 {exp.vendorContact}
+                                      </p>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Action Buttons */}
+                                  <div className="flex items-center gap-2">
+                                    {/* Add Installment Button */}
+                                    <button
+                                      onClick={() =>
+                                        setSelectedExpenseForInstallment(exp)
+                                      }
+                                      className="text-xs bg-amber-500 text-[#2c1238] font-bold px-3 py-1.5 rounded-xl hover:bg-amber-400 transition cursor-pointer"
+                                    >
+                                      + Installment
+                                    </button>
+                                    {/* Edit Button */}
+                                    <button
+                                      onClick={() => {
+                                        setEditingExpenseId(exp._id);
+                                        setExpenseForm({
+                                          expenseName: exp.expenseName,
+                                          category: exp.category,
+                                          totalAmount: exp.totalAmount,
+                                          vendorContact:
+                                            exp.vendorContact || "",
+                                          side: exp.side || "Both",
+                                        });
+                                        setIsEditModalOpen(true);
+                                      }}
+                                      className="text-xs bg-gray-100 text-gray-700 font-bold px-3 py-1.5 rounded-xl hover:bg-gray-200 transition cursor-pointer"
+                                    >
+                                      Edit
+                                    </button>
+                                    {/* Delete Button */}
+                                    <button
+                                      onClick={async () => {
+                                        if (
+                                          window.confirm(
+                                            `Are you sure you want to delete "${exp.expenseName}"?`
+                                          )
+                                        ) {
+                                          try {
+                                            await axios.delete(
+                                              `${API_BASE}/admin/finance/expense/${exp._id}`,
+                                              {
+                                                headers: {
+                                                  "x-admin-password": password,
+                                                },
+                                              }
+                                            );
+                                            fetchExpenses();
+                                          } catch (err) {
+                                            alert("Failed to delete expense");
+                                          }
+                                        }
+                                      }}
+                                      className="text-xs bg-rose-50 text-rose-600 font-bold px-3 py-1.5 rounded-xl hover:bg-rose-100 transition cursor-pointer"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Progress bar */}
+                                <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+                                  <div
+                                    className="bg-emerald-500 h-full transition-all"
+                                    style={{ width: `${progress}%` }}
+                                  />
+                                </div>
+                                <div className="flex justify-between text-xs text-gray-500 font-medium">
+                                  <span>Paid: ₹{paidSum.toLocaleString()}</span>
+                                  <span>
+                                    Pending: ₹
+                                    {(
+                                      exp.totalAmount - paidSum
+                                    ).toLocaleString()}
+                                  </span>
+                                </div>
+
+                                {/* Installment Badge List */}
+                                <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
+                                  {exp.installments.map((inst, idx) => (
+                                    <div
+                                      key={idx}
+                                      className={`text-xs px-3 py-1.5 rounded-xl border flex items-center gap-2 ${
+                                        inst.status === "Paid"
+                                          ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                                          : "bg-amber-50 border-amber-200 text-amber-800"
+                                      }`}
+                                    >
+                                      <span>
+                                        ₹{inst.amount.toLocaleString()}
+                                      </span>
+                                      <span className="font-bold">
+                                        ({inst.status})
+                                      </span>
+                                      {inst.receiptUrl && (
+                                        <a
+                                          href={inst.receiptUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="underline text-indigo-600 font-bold"
+                                        >
+                                          Receipt
+                                        </a>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {isEditModalOpen && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+                      <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl relative border border-gray-100">
+                        <div className="flex justify-between items-center mb-6">
+                          <h3 className="text-xl font-serif font-bold text-[#2c1238]">
+                            Edit Expense Details
+                          </h3>
+                          <button
+                            onClick={() => {
+                              setIsEditModalOpen(false);
+                              setEditingExpenseId(null);
+                              setExpenseForm({
+                                expenseName: "",
+                                category: "Venue",
+                                totalAmount: "",
+                                vendorContact: "",
+                                side: "Both",
+                              });
+                            }}
+                            className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 font-bold"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        <form
+                          onSubmit={async (e) => {
+                            e.preventDefault();
+                            try {
+                              await axios.put(
+                                `${API_BASE}/admin/finance/expense/${editingExpenseId}`,
+                                expenseForm,
+                                { headers: { "x-admin-password": password } }
+                              );
+                              setIsEditModalOpen(false);
+                              setEditingExpenseId(null);
+                              setExpenseForm({
+                                expenseName: "",
+                                category: "Venue",
+                                totalAmount: "",
+                                vendorContact: "",
+                                side: "Both",
+                              });
+                              fetchExpenses();
+                            } catch (err) {
+                              alert("Failed to update expense");
+                            }
+                          }}
+                          className="space-y-4"
+                        >
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                              Expense / Vendor Name
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={expenseForm.expenseName}
+                              onChange={(e) =>
+                                setExpenseForm({
+                                  ...expenseForm,
+                                  expenseName: e.target.value,
+                                })
+                              }
+                              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm font-medium"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                              Category
+                            </label>
+                            <select
+                              value={expenseForm.category}
+                              onChange={(e) =>
+                                setExpenseForm({
+                                  ...expenseForm,
+                                  category: e.target.value,
+                                })
+                              }
+                              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm font-medium"
+                            >
+                              {[
+                                "Venue",
+                                "Food & Catering",
+                                "Hotel & Stay",
+                                "Transport",
+                                "Gifts",
+                                "Decor",
+                                "Photography",
+                                "Others",
+                              ].map((cat) => (
+                                <option key={cat} value={cat}>
+                                  {cat}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                              Total Agreed Amount (₹)
+                            </label>
+                            <input
+                              type="number"
+                              required
+                              value={expenseForm.totalAmount}
+                              onChange={(e) =>
+                                setExpenseForm({
+                                  ...expenseForm,
+                                  totalAmount: e.target.value,
+                                })
+                              }
+                              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm font-medium"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                              Vendor Contact
+                            </label>
+                            <input
+                              type="text"
+                              value={expenseForm.vendorContact}
+                              onChange={(e) =>
+                                setExpenseForm({
+                                  ...expenseForm,
+                                  vendorContact: e.target.value,
+                                })
+                              }
+                              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm font-medium"
+                            />
+                          </div>
+                          <button
+                            type="submit"
+                            className="w-full bg-[#2c1238] text-white p-3.5 rounded-xl font-bold uppercase tracking-widest text-xs shadow-md hover:bg-[#1a0922] transition mt-2 cursor-pointer"
+                          >
+                            Save Changes
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedExpenseForInstallment && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+                      <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl relative border border-gray-100">
+                        <div className="flex justify-between items-center mb-6">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full">
+                              {selectedExpenseForInstallment.category}
+                            </span>
+                            <h3 className="text-xl font-serif font-bold text-[#2c1238] mt-1">
+                              {selectedExpenseForInstallment.expenseName}
+                            </h3>
+                          </div>
+                          <button
+                            onClick={() =>
+                              setSelectedExpenseForInstallment(null)
+                            }
+                            className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 font-bold"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        {/* Add Installment Form */}
+                        <form
+                          onSubmit={async (e) => {
+                            e.preventDefault();
+                            const formData = new FormData();
+                            formData.append("amount", installmentForm.amount);
+                            formData.append("dueDate", installmentForm.dueDate);
+                            formData.append(
+                              "paidDate",
+                              installmentForm.paidDate
+                            );
+                            formData.append("status", installmentForm.status);
+                            formData.append("note", installmentForm.note);
+                            if (installmentForm.receipt) {
+                              formData.append(
+                                "receipt",
+                                installmentForm.receipt
+                              );
+                            }
+
+                            try {
+                              await axios.post(
+                                `${API_BASE}/admin/finance/expense/${selectedExpenseForInstallment._id}/installment`,
+                                formData,
+                                {
+                                  headers: {
+                                    "x-admin-password": password,
+                                    "Content-Type": "multipart/form-data",
+                                  },
+                                }
+                              );
+                              setInstallmentForm({
+                                amount: "",
+                                dueDate: "",
+                                paidDate: "",
+                                status: "Pending",
+                                note: "",
+                                receipt: null,
+                              });
+                              setSelectedExpenseForInstallment(null);
+                              fetchExpenses();
+                            } catch (err) {
+                              alert("Failed to add installment");
+                            }
+                          }}
+                          className="space-y-4"
+                        >
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                                Amount (₹)
+                              </label>
+                              <input
+                                type="number"
+                                required
+                                placeholder="25000"
+                                value={installmentForm.amount}
+                                onChange={(e) =>
+                                  setInstallmentForm({
+                                    ...installmentForm,
+                                    amount: e.target.value,
+                                  })
+                                }
+                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm font-medium"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                                Status
+                              </label>
+                              <select
+                                value={installmentForm.status}
+                                onChange={(e) =>
+                                  setInstallmentForm({
+                                    ...installmentForm,
+                                    status: e.target.value,
+                                  })
+                                }
+                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm font-medium"
+                              >
+                                <option value="Pending">Pending</option>
+                                <option value="Paid">Paid</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                                Due Date
+                              </label>
+                              <input
+                                type="date"
+                                value={installmentForm.dueDate}
+                                onChange={(e) =>
+                                  setInstallmentForm({
+                                    ...installmentForm,
+                                    dueDate: e.target.value,
+                                  })
+                                }
+                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm font-medium"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                                Paid Date
+                              </label>
+                              <input
+                                type="date"
+                                value={installmentForm.paidDate}
+                                onChange={(e) =>
+                                  setInstallmentForm({
+                                    ...installmentForm,
+                                    paidDate: e.target.value,
+                                  })
+                                }
+                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm font-medium"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                              Note / Details
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Advance payment via UPI"
+                              value={installmentForm.note}
+                              onChange={(e) =>
+                                setInstallmentForm({
+                                  ...installmentForm,
+                                  note: e.target.value,
+                                })
+                              }
+                              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none text-sm font-medium"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                              Upload Receipt / Invoice
+                            </label>
+                            <input
+                              type="file"
+                              onChange={(e) =>
+                                setInstallmentForm({
+                                  ...installmentForm,
+                                  receipt: e.target.files[0],
+                                })
+                              }
+                              className="w-full p-2 bg-gray-50 border border-gray-200 rounded-xl outline-none text-xs file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100 cursor-pointer"
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            className="w-full bg-[#2c1238] text-white p-3.5 rounded-xl font-bold uppercase tracking-widest text-xs shadow-md hover:bg-[#1a0922] transition mt-2 cursor-pointer"
+                          >
+                            Save Installment
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* --- ANALYTICS GRAPHS SECTION --- */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+                    {/* Category Wise Spending Chart */}
+                    <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100">
+                      <h3 className="text-xl font-serif font-bold text-[#2c1238] mb-2">
+                        Category Spending Breakdown
+                      </h3>
+                      <p className="text-xs text-gray-400 uppercase tracking-widest mb-6">
+                        Total vs Paid vs Pending per Category
+                      </p>
+
+                      <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={(() => {
+                              const catMap = {};
+                              expenseData.expenses.forEach((exp) => {
+                                if (!catMap[exp.category]) {
+                                  catMap[exp.category] = {
+                                    category: exp.category,
+                                    Total: 0,
+                                    Paid: 0,
+                                    Pending: 0,
+                                  };
+                                }
+                                catMap[exp.category].Total += exp.totalAmount;
+                                const paid = exp.installments.reduce(
+                                  (sum, i) =>
+                                    i.status === "Paid" ? sum + i.amount : sum,
+                                  0
+                                );
+                                catMap[exp.category].Paid += paid;
+                                catMap[exp.category].Pending +=
+                                  exp.totalAmount - paid;
+                              });
+                              return Object.values(catMap);
+                            })()}
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              vertical={false}
+                              stroke="#f0f0f0"
+                            />
+                            <XAxis dataKey="category" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 11 }} />
+                            <Tooltip />
+                            <Legend />
+                            <Bar
+                              dataKey="Total"
+                              fill="#2c1238"
+                              radius={[6, 6, 0, 0]}
+                            />
+                            <Bar
+                              dataKey="Paid"
+                              fill="#10b981"
+                              radius={[6, 6, 0, 0]}
+                            />
+                            <Bar
+                              dataKey="Pending"
+                              fill="#f43f5e"
+                              radius={[6, 6, 0, 0]}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* Payment Timeline / Cash Outflow Chart */}
+                    <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100">
+                      <h3 className="text-xl font-serif font-bold text-[#2c1238] mb-2">
+                        Payment Timeline (Outflow)
+                      </h3>
+                      <p className="text-xs text-gray-400 uppercase tracking-widest mb-6">
+                        Cumulative paid amounts across dates
+                      </p>
+
+                      <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={(() => {
+                              // Gather all paid installments sorted by date
+                              let timelineMap = {};
+                              expenseData.expenses.forEach((exp) => {
+                                exp.installments.forEach((inst) => {
+                                  if (inst.status === "Paid" && inst.paidDate) {
+                                    timelineMap[inst.paidDate] =
+                                      (timelineMap[inst.paidDate] || 0) +
+                                      inst.amount;
+                                  }
+                                });
+                              });
+                              const sortedDates =
+                                Object.keys(timelineMap).sort();
+                              let runningTotal = 0;
+                              return sortedDates.map((date) => {
+                                runningTotal += timelineMap[date];
+                                return { date, Outflow: runningTotal };
+                              });
+                            })()}
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              vertical={false}
+                              stroke="#f0f0f0"
+                            />
+                            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 11 }} />
+                            <Tooltip />
+                            <Line
+                              type="monotone"
+                              dataKey="Outflow"
+                              stroke="#2c1238"
+                              strokeWidth={3}
+                              dot={{ r: 5 }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
