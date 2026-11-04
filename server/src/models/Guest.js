@@ -8,6 +8,7 @@ const guestSchema = new mongoose.Schema({
     enum: ['male', 'female'], 
     required: true 
   },
+  useSalutation: { type: Boolean, default: true },
   expectedGuests: { type: Number, default: 1 },
   inviteCode: { type: String, required: true, unique: true },
   withFamily: { type: Boolean, default: false },

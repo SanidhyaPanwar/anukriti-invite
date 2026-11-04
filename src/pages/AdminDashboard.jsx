@@ -38,6 +38,7 @@ export default function AdminDashboard() {
     nickname: "",
     phone: "",
     gender: "male",
+    useSalutation: true, // True = Shri/Shrimati, False = None (for females)
     expectedGuests: 1,
     withFamily: false,
     side: "bride",
@@ -112,7 +113,12 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    if (isAuthenticated && (activeTab === "guests" || activeTab === "rsvps" || activeTab === "overview"))
+    if (
+      isAuthenticated &&
+      (activeTab === "guests" ||
+        activeTab === "rsvps" ||
+        activeTab === "overview")
+    )
       fetchGuests();
     if (isAuthenticated && activeTab === "events") fetchEvents();
   }, [isAuthenticated, activeTab]);
@@ -174,7 +180,6 @@ export default function AdminDashboard() {
           guestForm,
           { headers: { "x-admin-password": password } }
         );
-        alert("Guest updated successfully!");
       } else {
         const res = await axios.post(`${API_BASE}/admin/guest`, guestForm, {
           headers: { "x-admin-password": password },
@@ -210,6 +215,9 @@ export default function AdminDashboard() {
       ...guest,
       phone: guest.phone || "",
       nickname: guest.nickname || "",
+      gender: guest.gender || "male",
+      useSalutation:
+        guest.useSalutation !== undefined ? guest.useSalutation : true,
       expectedGuests: guest.expectedGuests || 1,
       photos: guest.photos || [],
     });
@@ -226,7 +234,16 @@ export default function AdminDashboard() {
   const handleWhatsAppShare = (e, guest) => {
     e.stopPropagation();
     const inviteUrl = `${window.location.origin}/invite/${guest.inviteCode}`;
-    const message = `Namaste ${guest.fullName}, 🙏\n\nYou are cordially invited to celebrate the sacred union of Anukriti & Digvijay! ✨\n\nPlease view your exclusive invitation and timeline here:\n${inviteUrl}\n\nWe eagerly await your gracious presence! 🪔`;
+
+    // Determine prefix logically
+    let prefix = "";
+    if (guest.gender === "male") {
+      prefix = "Shri ";
+    } else if (guest.gender === "female" && guest.useSalutation !== false) {
+      prefix = "Shrimati ";
+    }
+
+    const message = `Namaste ${prefix}${guest.fullName}, 🙏\n\nYou are cordially invited to celebrate the sacred union of Anukriti & Digvijay! ✨\n\nPlease view your exclusive invitation and timeline here:\n${inviteUrl}\n\nWe eagerly await your gracious presence! 🪔`;
     const encodedMessage = encodeURIComponent(message);
     const cleanPhone = guest.phone ? guest.phone.replace(/\D/g, "") : "";
     window.open(`https://wa.me/${cleanPhone}?text=${encodedMessage}`, "_blank");
@@ -595,8 +612,12 @@ export default function AdminDashboard() {
               className="max-w-7xl mx-auto space-y-8 relative z-10"
             >
               <div className="mb-6">
-                <h2 className="text-3xl font-serif font-bold text-[#2c1238]">Dashboard Overview</h2>
-                <p className="text-xs text-gray-500 uppercase tracking-widest mt-1">Live metrics and system status</p>
+                <h2 className="text-3xl font-serif font-bold text-[#2c1238]">
+                  Dashboard Overview
+                </h2>
+                <p className="text-xs text-gray-500 uppercase tracking-widest mt-1">
+                  Live metrics and system status
+                </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -607,8 +628,12 @@ export default function AdminDashboard() {
                       <Users size={24} />
                     </div>
                     <div>
-                      <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">Total Invitations</h3>
-                      <p className="text-3xl font-bold text-gray-900">{totalGuests}</p>
+                      <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">
+                        Total Invitations
+                      </h3>
+                      <p className="text-3xl font-bold text-gray-900">
+                        {totalGuests}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4 border-t border-gray-100 pt-4 mt-2">
@@ -616,8 +641,12 @@ export default function AdminDashboard() {
                       <Activity size={24} />
                     </div>
                     <div>
-                      <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">Expected Guests</h3>
-                      <p className="text-3xl font-bold text-gray-900">{totalExpectedHeadcount}</p>
+                      <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">
+                        Expected Guests
+                      </h3>
+                      <p className="text-3xl font-bold text-gray-900">
+                        {totalExpectedHeadcount}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -629,16 +658,28 @@ export default function AdminDashboard() {
                   </h3>
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
-                      <span className="flex items-center gap-2 text-emerald-600 font-bold"><CheckCircle2 size={18} /> Attending</span>
-                      <span className="text-xl font-bold text-gray-900">{attendingCount}</span>
+                      <span className="flex items-center gap-2 text-emerald-600 font-bold">
+                        <CheckCircle2 size={18} /> Attending
+                      </span>
+                      <span className="text-xl font-bold text-gray-900">
+                        {attendingCount}
+                      </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="flex items-center gap-2 text-rose-600 font-bold"><XCircle size={18} /> Declined</span>
-                      <span className="text-xl font-bold text-gray-900">{declinedCount}</span>
+                      <span className="flex items-center gap-2 text-rose-600 font-bold">
+                        <XCircle size={18} /> Declined
+                      </span>
+                      <span className="text-xl font-bold text-gray-900">
+                        {declinedCount}
+                      </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="flex items-center gap-2 text-amber-600 font-bold"><Clock size={18} /> Pending</span>
-                      <span className="text-xl font-bold text-gray-900">{pendingCount}</span>
+                      <span className="flex items-center gap-2 text-amber-600 font-bold">
+                        <Clock size={18} /> Pending
+                      </span>
+                      <span className="text-xl font-bold text-gray-900">
+                        {pendingCount}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -650,19 +691,31 @@ export default function AdminDashboard() {
                       Server Status
                     </h3>
                     <div className="flex items-center gap-4 mb-6 mt-4">
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${keepAliveStatus ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                      <div
+                        className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                          keepAliveStatus
+                            ? "bg-green-100 text-green-600"
+                            : "bg-gray-100 text-gray-400"
+                        }`}
+                      >
                         <Server size={24} />
                       </div>
                       <div>
-                        <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">Anti-Sleep Mode</h3>
-                        <p className={`text-lg font-bold ${keepAliveStatus ? 'text-green-600' : 'text-gray-500'}`}>
-                          {keepAliveStatus ? 'Active ⚡' : 'Inactive 💤'}
+                        <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">
+                          Anti-Sleep Mode
+                        </h3>
+                        <p
+                          className={`text-lg font-bold ${
+                            keepAliveStatus ? "text-green-600" : "text-gray-500"
+                          }`}
+                        >
+                          {keepAliveStatus ? "Active ⚡" : "Inactive 💤"}
                         </p>
                       </div>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => setActiveTab('settings')} 
+                  <button
+                    onClick={() => setActiveTab("settings")}
                     className="w-full py-3 bg-gray-50 border border-gray-200 rounded-xl text-xs uppercase tracking-widest font-bold text-gray-600 hover:bg-gray-100 hover:border-gray-300 transition cursor-pointer"
                   >
                     Manage Settings
@@ -702,7 +755,8 @@ export default function AdminDashboard() {
                 </div>
 
                 <form onSubmit={handleSaveGuest} className="space-y-5">
-                  <div className="grid grid-cols-2 gap-5">
+                  {/* Row 1: Full Name & Nickname */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
                         Full Name
@@ -710,7 +764,8 @@ export default function AdminDashboard() {
                       <input
                         type="text"
                         required
-                        className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all font-medium text-gray-900"
+                        placeholder="e.g. Aakanksha"
+                        className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none font-medium text-gray-900"
                         value={guestForm.fullName}
                         onChange={(e) =>
                           setGuestForm({
@@ -727,7 +782,7 @@ export default function AdminDashboard() {
                       <input
                         type="text"
                         placeholder="Optional"
-                        className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all font-medium text-gray-900"
+                        className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none font-medium text-gray-900"
                         value={guestForm.nickname}
                         onChange={(e) =>
                           setGuestForm({
@@ -739,40 +794,8 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-5">
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                        Phone Number (Digits Only)
-                      </label>
-                      <input
-                        type="tel"
-                        placeholder="919876543210"
-                        value={guestForm.phone || ""}
-                        onChange={handlePhoneChange}
-                        className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all font-medium text-gray-900"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                        Expected Guests
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        required
-                        className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all font-medium text-gray-900"
-                        value={guestForm.expectedGuests}
-                        onChange={(e) =>
-                          setGuestForm({
-                            ...guestForm,
-                            expectedGuests: parseInt(e.target.value) || 1,
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-5">
+                  {/* Row 2: Gender Selection & Conditional Salutation */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-center">
                     <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
                         Gender
@@ -788,9 +811,79 @@ export default function AdminDashboard() {
                         <option value="female">Female</option>
                       </select>
                     </div>
+
+                    {/* If Female is selected, show option to toggle Shrimati vs None */}
+                    {guestForm.gender === "female" ? (
+                      <div className="pt-5">
+                        <label className="flex items-center gap-3 cursor-pointer select-none bg-gray-50 p-3.5 border border-gray-200 rounded-xl">
+                          <input
+                            type="checkbox"
+                            checked={guestForm.useSalutation !== false}
+                            onChange={(e) =>
+                              setGuestForm({
+                                ...guestForm,
+                                useSalutation: e.target.checked,
+                              })
+                            }
+                            className="w-5 h-5 text-amber-600 rounded border-gray-300 focus:ring-amber-500 accent-amber-500"
+                          />
+                          <span className="text-sm font-bold text-gray-700">
+                            Use "Shrimati" prefix?{" "}
+                            <span className="text-xs font-normal text-gray-400"></span>
+                          </span>
+                        </label>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                          Automatic Prefix
+                        </label>
+                        <div className="p-3.5 bg-gray-100 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600">
+                          Will be addressed as{" "}
+                          <span className="text-[#2c1238]">Shri</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Row 2: Phone Number & Expected Guests */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                        Side
+                        Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        placeholder="9876543210"
+                        value={guestForm.phone || ""}
+                        onChange={handlePhoneChange}
+                        className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none font-medium text-gray-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                        Expected Guests Count
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        required
+                        className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none font-medium text-gray-900"
+                        value={guestForm.expectedGuests}
+                        onChange={(e) =>
+                          setGuestForm({
+                            ...guestForm,
+                            expectedGuests: parseInt(e.target.value) || 1,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 3: Side & Access Tier */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                        Hosting Side
                       </label>
                       <select
                         className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-medium text-gray-900"
@@ -803,25 +896,26 @@ export default function AdminDashboard() {
                         <option value="groom">Team Groom</option>
                       </select>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                      Access Tier
-                    </label>
-                    <select
-                      className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-medium text-gray-900"
-                      value={guestForm.inviteType}
-                      onChange={(e) =>
-                        setGuestForm({
-                          ...guestForm,
-                          inviteType: e.target.value,
-                        })
-                      }
-                    >
-                      <option value="wedding">Wedding Only (Main Event)</option>
-                      <option value="complete">Complete (All Events)</option>
-                    </select>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                        Access Tier
+                      </label>
+                      <select
+                        className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 font-medium text-gray-900"
+                        value={guestForm.inviteType}
+                        onChange={(e) =>
+                          setGuestForm({
+                            ...guestForm,
+                            inviteType: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="wedding">
+                          Wedding Only (Main Event)
+                        </option>
+                        <option value="complete">Complete (All Events)</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-3 py-2">
@@ -1151,7 +1245,7 @@ export default function AdminDashboard() {
                                 {guest.fullName}
                               </p>
                               <p className="text-xs text-gray-400">
-                                {guest.phone ? `+${guest.phone}` : "No phone"}
+                                {guest.phone ? `${guest.phone}` : "No phone"}
                               </p>
                             </td>
 

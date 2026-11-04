@@ -71,7 +71,7 @@ export default function WelcomeReveal() {
     ? "Son of Mrs. Santresh & Mr. Harendra Singh Poonia"
     : "Daughter of Mrs. Sanju & Dr. Indra Pal Singh Panwar";
 
-  // --- NEW CULTURAL NAMING ENGINE ---
+  // --- UPDATED CULTURAL NAMING ENGINE ---
   const getFormattedBaseName = () => {
     if (!guest || !guest.fullName) return "";
 
@@ -85,7 +85,14 @@ export default function WelcomeReveal() {
 
     let prefix = "";
     if (!hasProfTitle) {
-      prefix = guest.gender === "female" ? "Shrimati " : "Shri ";
+      if (guest.gender === "male") {
+        prefix = "Shri ";
+      } else if (guest.gender === "female") {
+        // Only add Shrimati if useSalutation is true (or undefined for legacy guests)
+        if (guest.useSalutation !== false) {
+          prefix = "Shrimati ";
+        }
+      }
     }
 
     let suffix = "";
