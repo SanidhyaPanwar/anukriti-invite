@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import {
   Users,
@@ -103,6 +103,7 @@ export default function AdminDashboard() {
   const [isVerifyingPin, setIsVerifyingPin] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [viewingInstallment, setViewingInstallment] = useState(null);
 
   const [expenseData, setExpenseData] = useState({
     expenses: [],
@@ -130,16 +131,7 @@ export default function AdminDashboard() {
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [sideFilter, setSideFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
-
-  const filteredExpenses = expenseData.expenses.filter((exp) => {
-    const matchesCategory =
-      categoryFilter === "All" || exp.category === categoryFilter;
-    const matchesSide = sideFilter === "All" || exp.side === sideFilter;
-    const matchesSearch = exp.expenseName
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSide && matchesSearch;
-  });
+  const [sortBy, setSortBy] = useState("pending-desc");
 
   const handleVerifyFinancePin = async (e) => {
     e.preventDefault();
@@ -160,6 +152,46 @@ export default function AdminDashboard() {
       setIsVerifyingPin(false);
     }
   };
+
+  const filteredAndSortedExpenses = useMemo(() => {
+    if (!expenseData?.expenses) return [];
+
+    // Helper to compute pending amount for any expense card
+    const getPendingAmount = (exp) => {
+      const paid = (exp.installments || [])
+        .filter((inst) => inst.status === "Paid")
+        .reduce((sum, inst) => sum + Number(inst.amount || 0), 0);
+      return Number(exp.totalAmount || 0) - paid;
+    };
+
+    // 1. Filter by Category & Search Query
+    const filtered = expenseData.expenses.filter((exp) => {
+      const matchesCategory =
+        categoryFilter === "All" || exp.category === categoryFilter;
+      const matchesSearch = exp.expenseName
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+
+    // 2. Sort results
+    return filtered.sort((a, b) => {
+      switch (sortBy) {
+        case "pending-desc":
+          return getPendingAmount(b) - getPendingAmount(a);
+        case "pending-asc":
+          return getPendingAmount(a) - getPendingAmount(b);
+        case "total-desc":
+          return Number(b.totalAmount || 0) - Number(a.totalAmount || 0);
+        case "total-asc":
+          return Number(a.totalAmount || 0) - Number(b.totalAmount || 0);
+        case "name-asc":
+          return a.expenseName.localeCompare(b.expenseName);
+        default:
+          return 0;
+      }
+    });
+  }, [expenseData.expenses, categoryFilter, searchQuery, sortBy]);
 
   const fetchExpenses = async () => {
     try {
@@ -2278,70 +2310,69 @@ export default function AdminDashboard() {
                       <h3 className="text-xl font-serif font-bold text-[#2c1238] mb-6">
                         Expense Records & Installments
                       </h3>
-                      {/* Filter Control Bar */}
+                      {/* Filter & Sort Control Bar */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-200">
-                                    {/* Search input */}
-                                    <input
-                                      type="text"
-                                      placeholder="Search vendor or expense..."
-                                      value={searchQuery}
-                                      onChange={(e) =>
-                                        setSearchQuery(e.target.value)
-                                      }
-                                      className="p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-amber-500"
-                                    />
+                        {/* Search input */}
+                        <input
+                          type="text"
+                          placeholder="Search vendor or expense..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-amber-500"
+                        />
 
-                                    {/* Category Filter */}
-                                    <select
-                                      value={categoryFilter}
-                                      onChange={(e) =>
-                                        setCategoryFilter(e.target.value)
-                                      }
-                                      className="p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium outline-none"
-                                    >
-                                      <option value="All">
-                                        All Categories
-                                      </option>
-                                      {[
-                                        "Venue",
-                                        "Food & Catering",
-                                        "Hotel & Stay",
-                                        "Transport",
-                                        "Decor",
-                                        "Photography",
-                                        "Others",
-                                      ].map((cat) => (
-                                        <option key={cat} value={cat}>
-                                          {cat}
-                                        </option>
-                                      ))}
-                                    </select>
+                        {/* Category Filter */}
+                        <select
+                          value={categoryFilter}
+                          onChange={(e) => setCategoryFilter(e.target.value)}
+                          className="p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium outline-none cursor-pointer"
+                        >
+                          <option value="All">All Categories</option>
+                          {[
+                            "Venue",
+                            "Food & Catering",
+                            "Hotel & Stay",
+                            "Transport",
+                            "Decor",
+                            "Photography",
+                            "Others",
+                          ].map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                        </select>
 
-                                    {/* Side Filter */}
-                                    <select
-                                      value={sideFilter}
-                                      onChange={(e) =>
-                                        setSideFilter(e.target.value)
-                                      }
-                                      className="p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium outline-none"
-                                    >
-                                      <option value="All">
-                                        All Sides (Bride & Groom)
-                                      </option>
-                                      <option value="Bride">Bride Side</option>
-                                      <option value="Groom">Groom Side</option>
-                                      <option value="Both">
-                                        Shared / Both
-                                      </option>
-                                    </select>
-                                  </div>
+                        {/* Sort By Dropdown (Replaces Side Filter) */}
+                        <select
+                          value={sortBy}
+                          onChange={(e) => setSortBy(e.target.value)}
+                          className="p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium outline-none cursor-pointer focus:ring-2 focus:ring-amber-500"
+                        >
+                          <option value="pending-desc">
+                            Sort by: Pending Amount (High to Low)
+                          </option>
+                          <option value="pending-asc">
+                            Sort by: Pending Amount (Low to High)
+                          </option>
+                          <option value="total-desc">
+                            Sort by: Total Amount (High to Low)
+                          </option>
+                          <option value="total-asc">
+                            Sort by: Total Amount (Low to High)
+                          </option>
+                          <option value="name-asc">
+                            Sort by: Vendor Name (A to Z)
+                          </option>
+                        </select>
+                      </div>
                       <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
                         {expenseData.expenses.length === 0 ? (
                           <p className="text-gray-400 italic text-center py-10">
                             No expenses recorded yet.
                           </p>
                         ) : (
-                          filteredExpenses.map((exp) => {
+                          filteredAndSortedExpenses.map((exp) => {
                             const paidSum = exp.installments.reduce(
                               (acc, i) =>
                                 i.status === "Paid" ? acc + i.amount : acc,
@@ -2371,7 +2402,7 @@ export default function AdminDashboard() {
                                       </p>
                                     )}
                                   </div>
-                                  
+
                                   {/* Action Buttons */}
                                   <div className="flex items-center gap-2">
                                     {/* Add Installment Button */}
@@ -2450,33 +2481,48 @@ export default function AdminDashboard() {
 
                                 {/* Installment Badge List */}
                                 <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
-                                  {exp.installments.map((inst, idx) => (
-                                    <div
-                                      key={idx}
-                                      className={`text-xs px-3 py-1.5 rounded-xl border flex items-center gap-2 ${
-                                        inst.status === "Paid"
-                                          ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                                          : "bg-amber-50 border-amber-200 text-amber-800"
-                                      }`}
-                                    >
-                                      <span>
-                                        ₹{inst.amount.toLocaleString()}
-                                      </span>
-                                      <span className="font-bold">
-                                        ({inst.status})
-                                      </span>
-                                      {inst.receiptUrl && (
-                                        <a
-                                          href={inst.receiptUrl}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          className="underline text-indigo-600 font-bold"
-                                        >
-                                          Receipt
-                                        </a>
-                                      )}
-                                    </div>
-                                  ))}
+                                  {exp.installments &&
+                                    exp.installments.map((inst, idx) => (
+                                      <button
+                                        key={inst._id || idx}
+                                        type="button"
+                                        onClick={() =>
+                                          setViewingInstallment({
+                                            installment: inst,
+                                            expenseName: exp.expenseName,
+                                          })
+                                        }
+                                        className={`text-xs px-3 py-1.5 rounded-xl border flex items-center gap-2 transition cursor-pointer hover:shadow-xs ${
+                                          inst.status === "Paid"
+                                            ? "bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100"
+                                            : "bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100"
+                                        }`}
+                                      >
+                                        <span>
+                                          ₹{inst.amount.toLocaleString()}
+                                        </span>
+                                        <span className="font-bold">
+                                          ({inst.status})
+                                        </span>
+
+                                        {inst.receiptUrl && (
+                                          <span
+                                            onClick={(e) => {
+                                              e.stopPropagation(); // Prevents opening the modal when just clicking the receipt link
+                                              window.open(
+                                                inst.receiptUrl,
+                                                "_blank",
+                                                "noreferrer"
+                                              );
+                                            }}
+                                            className="text-indigo-600 font-bold hover:underline flex items-center gap-0.5 ml-1"
+                                            title="Open Receipt Directly"
+                                          >
+                                            📎 Receipt
+                                          </span>
+                                        )}
+                                      </button>
+                                    ))}
                                 </div>
                               </div>
                             );
@@ -2485,6 +2531,113 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   </div>
+
+                  {/* --- INSTALLMENT DETAILS MODAL --- */}
+                  {viewingInstallment && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+                      <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl relative border border-gray-100 space-y-5">
+                        {/* Modal Header */}
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full">
+                              Installment Details
+                            </span>
+                            <h3 className="text-xl font-serif font-bold text-[#2c1238] mt-1.5">
+                              {viewingInstallment.expenseName}
+                            </h3>
+                          </div>
+                          <button
+                            onClick={() => setViewingInstallment(null)}
+                            className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 font-bold"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        {/* Amount Banner */}
+                        <div className="flex justify-between items-center p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                          <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">
+                            Amount
+                          </span>
+                          <span className="text-2xl font-bold text-[#2c1238]">
+                            ₹
+                            {viewingInstallment.installment.amount?.toLocaleString()}
+                          </span>
+                        </div>
+
+                        {/* Status & Dates */}
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div className="p-3 bg-gray-50 rounded-xl">
+                            <span className="text-gray-400 font-semibold block mb-0.5">
+                              Status
+                            </span>
+                            <span
+                              className={`font-bold text-sm ${
+                                viewingInstallment.installment.status === "Paid"
+                                  ? "text-emerald-600"
+                                  : "text-amber-600"
+                              }`}
+                            >
+                              {viewingInstallment.installment.status}
+                            </span>
+                          </div>
+                          <div className="p-3 bg-gray-50 rounded-xl">
+                            <span className="text-gray-400 font-semibold block mb-0.5">
+                              Due Date
+                            </span>
+                            <span className="font-bold text-gray-800 text-sm">
+                              {viewingInstallment.installment.dueDate
+                                ? new Date(
+                                    viewingInstallment.installment.dueDate
+                                  ).toLocaleDateString()
+                                : "N/A"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {viewingInstallment.installment.paidDate && (
+                          <div className="p-3 bg-gray-50 rounded-xl text-xs">
+                            <span className="text-gray-400 font-semibold block mb-0.5">
+                              Paid Date
+                            </span>
+                            <span className="font-bold text-gray-800 text-sm">
+                              {new Date(
+                                viewingInstallment.installment.paidDate
+                              ).toLocaleDateString()}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Note */}
+                        {viewingInstallment.installment.note && (
+                          <div className="p-3 bg-gray-50 rounded-xl text-xs">
+                            <span className="text-gray-400 font-semibold block mb-1">
+                              Note / Description
+                            </span>
+                            <p className="text-gray-700 font-medium">
+                              {viewingInstallment.installment.note}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Receipt Link Button */}
+                        {viewingInstallment.installment.receiptUrl ? (
+                          <a
+                            href={viewingInstallment.installment.receiptUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full bg-[#2c1238] text-white p-3.5 rounded-xl font-bold uppercase tracking-widest text-xs shadow-md hover:bg-[#1a0922] transition flex items-center justify-center gap-2 cursor-pointer mt-2"
+                          >
+                            📄 View Receipt / Invoice
+                          </a>
+                        ) : (
+                          <div className="p-3 bg-gray-100 rounded-xl text-xs text-center text-gray-400 font-medium">
+                            No receipt uploaded for this payment
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {isEditModalOpen && (
                     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
