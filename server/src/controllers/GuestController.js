@@ -49,8 +49,7 @@ exports.getAllGuests = async (req, res) => {
 
   exports.createGuestRsvp = async (req, res) => {
     try {
-        // Destructure dance_stamina from req.body
-        const { attending, emotional_guess, wedding_mood, song_request, dance_stamina, note } = req.body;
+        const { attending, emotional_guess, wedding_mood, song_request, vibe_check, note } = req.body;
         
         const guest = await Guest.findOne({ inviteCode: req.params.inviteCode });
         if (!guest) {
@@ -63,7 +62,7 @@ exports.getAllGuests = async (req, res) => {
           guest.emotionalGuess = emotional_guess || '';
           guest.weddingMood = wedding_mood || '';
           guest.songRequest = song_request || '';
-          guest.danceStamina = dance_stamina || ''; // <--- ADD THIS LINE
+          guest.vibeCheck = vibe_check || '';
           guest.guestNote = note || '';
         } else {
           guest.emotionalGuess = '';
@@ -90,3 +89,25 @@ exports.getAllGuests = async (req, res) => {
       res.status(500).json({ error: error.message });
     }
   };
+
+  exports.resetGuestRsvp = async (req, res) => {
+    try {
+        const guest = await Guest.findOne({ inviteCode: req.params.inviteCode });
+        if (!guest) return res.status(404).json({ error: 'Guest not found' });
+
+        // Reset everything to defaults
+        guest.rsvpStatus = 'pending';
+        guest.emotionalGuess = '';
+        guest.weddingMood = '';
+        guest.songRequest = '';
+        guest.vibeCheck = ''; 
+        guest.guestNote = '';
+
+        await guest.save();
+        res.json({ success: true, message: 'RSVP reset successfully!' });
+        
+    } catch (error) {
+        console.error("Reset RSVP Error:", error);
+        res.status(500).json({ error: 'Server error resetting RSVP' });
+    }
+};

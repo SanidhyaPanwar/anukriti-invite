@@ -26,7 +26,7 @@ export default function RSVP() {
   const [teamGuess, setTeamGuess] = useState("");
   const [songRequest, setSongRequest] = useState("");
   const [weddingMood, setWeddingMood] = useState("");
-  const [danceStamina, setDanceStamina] = useState(""); // Holds Option A selection
+  const [vibeCheck, setVibeCheck] = useState(""); // Holds Option A selection
   const [note, setNote] = useState("");
 
   // Audio References for the sound effects
@@ -49,7 +49,7 @@ export default function RSVP() {
           setTeamGuess(data.teamGuess || "");
           setWeddingMood(data.weddingMood || "");
           setSongRequest(data.songRequest || "");
-          setDanceStamina(data.danceStamina || "");
+          setVibeCheck(data.vibeCheck || "");
           setNote(data.guestNote || "");
           setIsAlreadySubmitted(true);
         }
@@ -110,7 +110,7 @@ export default function RSVP() {
       emotional_guess: teamGuess,
       wedding_mood: weddingMood,
       song_request: songRequest,
-      dance_stamina: danceStamina,
+      vibe_check: vibeCheck,
       note: note,
     };
 
@@ -121,6 +121,31 @@ export default function RSVP() {
     } catch (error) {
       console.error("Failed to submit RSVP", error);
       alert("Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // --- NEW: RESET RSVP FUNCTION ---
+  const handleResetRsvp = async () => {
+    if (!window.confirm("Are you sure you want to reset your RSVP? This will clear all your answers.")) return;
+    
+    setIsSubmitting(true);
+    try {
+      await axios.post(`${API_BASE}/guest/${inviteCode}/reset-rsvp`);
+      
+      // Clear all frontend states back to default
+      setAttending("yes");
+      setTeamGuess("");
+      setWeddingMood("");
+      setVibeCheck("");
+      setSongRequest("");
+      setNote("");
+      setIsAlreadySubmitted(false); // Throws them back to the empty form
+      
+    } catch (error) {
+      console.error("Failed to reset RSVP", error);
+      alert("Something went wrong while resetting. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -177,12 +202,25 @@ export default function RSVP() {
                 {attending === "yes" ? "✨ Joyfully Attending" : "🥀 Regretfully Declined"}
               </h3>
             </div>
-            <button
-              onClick={() => setIsAlreadySubmitted(false)}
-              className="bg-lavender-900 text-gold-light px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold flex items-center gap-1.5 shadow hover:scale-105 transition"
-            >
-              <Edit3 size={14} /> Edit Response
-            </button>
+            
+            {/* BUTTON ROW: Edit & Reset */}
+            <div className="flex flex-col gap-2 items-end">
+              <button
+                onClick={() => setIsAlreadySubmitted(false)}
+                className="bg-lavender-900 text-gold-light px-4 py-2 rounded-xl text-xs uppercase tracking-wider font-bold flex items-center gap-1.5 shadow hover:scale-105 transition"
+              >
+                <Edit3 size={14} /> Edit
+              </button>
+              
+              <button
+                type="button"
+                onClick={handleResetRsvp}
+                disabled={isSubmitting}
+                className="text-[10px] uppercase tracking-widest font-bold text-rose-500 hover:text-rose-700 transition underline underline-offset-2 disabled:opacity-50 cursor-pointer"
+              >
+                Reset RSVP
+              </button>
+            </div>
           </div>
 
           {attending === "yes" && (
@@ -201,12 +239,12 @@ export default function RSVP() {
                 <p className="font-bold text-gray-900 text-base">{weddingMood || "Not specified"}</p>
               </div>
 
-              {danceStamina && (
+              {vibeCheck && (
                 <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-inner">
                   <span className="text-[10px] uppercase tracking-widest text-gray-400 font-bold block">
                   Vibe Check ✨
                   </span>
-                  <p className="font-bold text-gray-900 text-base">{danceStamina}</p>
+                  <p className="font-bold text-gray-900 text-base">{vibeCheck}</p>
                 </div>
               )}
 
@@ -381,7 +419,7 @@ export default function RSVP() {
               </div>
             </motion.div>
 
-            {/* DANCE-OFF VIBE (OPTION A) */}
+            {/* VIBE Check */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -403,17 +441,17 @@ export default function RSVP() {
                   <label
                     key={vibe.id}
                     className={`p-3 rounded-xl border-2 cursor-pointer text-sm font-semibold transition-all text-left px-4 ${
-                      danceStamina === vibe.id
+                      vibeCheck === vibe.id
                         ? "bg-lavender-900 border-lavender-900 text-white shadow-md"
                         : "bg-transparent border-gray-300 text-gray-600 hover:border-lavender-400"
                     }`}
                   >
                     <input
                       type="radio"
-                      name="danceStamina"
+                      name="vibeCheck"
                       value={vibe.id}
-                      checked={danceStamina === vibe.id}
-                      onChange={(e) => setDanceStamina(e.target.value)}
+                      checked={vibeCheck === vibe.id}
+                      onChange={(e) => setVibeCheck(e.target.value)}
                       className="hidden"
                     />
                     {vibe.label}

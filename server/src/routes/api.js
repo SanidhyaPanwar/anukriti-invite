@@ -9,6 +9,7 @@ const adminAuth = require('../middleware/auth');
 router.get('/guest/:code', guestController.getGuestByCode);
 router.get('/events', eventController.getTimeline);
 router.post('/guest/:inviteCode/rsvp', guestController.createGuestRsvp);
+router.post('/guest/:inviteCode/reset-rsvp', guestController.resetGuestRsvp);
 
 // === ADMIN ROUTES (Protected) ===
 router.post('/admin/guest', adminAuth, guestController.createGuest);

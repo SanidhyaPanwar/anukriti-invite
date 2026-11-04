@@ -18,6 +18,7 @@ const guestSchema = new mongoose.Schema({
   weddingMood: { type: String, default: '' },
   guestNote: { type: String, default: '' },
   songRequest: { type: String, default: '' }, 
+  vibeCheck: { type: String, default: '' },
   phone: String,
   email: String,
   side: { 
