@@ -4,7 +4,7 @@ const cloudinary = require('cloudinary').v2;
 // Verify Secondary Financial PIN
 exports.verifyFinancePin = async (req, res) => {
   const { pin } = req.body;
-  const expectedPin = process.env.EXPENSE_PIN || "1234"; // Default fallback if not set
+  const expectedPin = process.env.EXPENSE_PIN || "2200"; // Default fallback if not set
 
   if (pin === expectedPin) {
     return res.json({ success: true, message: "Authorized" });

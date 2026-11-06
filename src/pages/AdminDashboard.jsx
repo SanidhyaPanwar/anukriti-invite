@@ -116,6 +116,8 @@ export default function AdminDashboard() {
     totalAmount: "",
     vendorContact: "",
     side: "Both",
+    paymentStatus: "Paid",
+    paidDate: new Date().toISOString().split("T")[0],
   });
   const [selectedExpenseForInstallment, setSelectedExpenseForInstallment] =
     useState(null);
@@ -156,44 +158,82 @@ export default function AdminDashboard() {
   };
 
   const filteredAndSortedExpenses = useMemo(() => {
-    if (!expenseData?.expenses) return [];
+    let result = [...expenseData.expenses]; // Always create a shallow copy before sorting
 
-    // Helper to compute pending amount for any expense card
-    const getPendingAmount = (exp) => {
-      const paid = (exp.installments || [])
-        .filter((inst) => inst.status === "Paid")
-        .reduce((sum, inst) => sum + Number(inst.amount || 0), 0);
-      return Number(exp.totalAmount || 0) - paid;
+    // 1. Search Filter
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (exp) =>
+          exp.expenseName.toLowerCase().includes(q) ||
+          (exp.vendorContact && exp.vendorContact.toLowerCase().includes(q)),
+      );
+    }
+
+    // 2. Category Filter
+    if (categoryFilter !== "All") {
+      result = result.filter((exp) => exp.category === categoryFilter);
+    }
+
+    // Helper function to find the most recent paidDate for an expense
+    const getLastPaidDate = (installments) => {
+      if (!installments || installments.length === 0) return 0;
+
+      const paidDates = installments
+        // Ensure status is Paid AND paidDate exists AND isn't an empty string
+        .filter(
+          (inst) =>
+            inst.status === "Paid" &&
+            inst.paidDate &&
+            inst.paidDate.trim() !== "",
+        )
+        .map((inst) => new Date(inst.paidDate).getTime());
+
+      return paidDates.length > 0 ? Math.max(...paidDates) : 0; // 0 if unpaid or no valid dates
     };
 
-    // 1. Filter by Category & Search Query
-    const filtered = expenseData.expenses.filter((exp) => {
-      const matchesCategory =
-        categoryFilter === "All" || exp.category === categoryFilter;
-      const matchesSearch = exp.expenseName
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
+    // 3. Sorting
+    result.sort((a, b) => {
+      // Calculate pending amounts for pending sort options
+      const aPaid = (a.installments || []).reduce(
+        (acc, i) => (i.status === "Paid" ? acc + i.amount : acc),
+        0,
+      );
+      const bPaid = (b.installments || []).reduce(
+        (acc, i) => (i.status === "Paid" ? acc + i.amount : acc),
+        0,
+      );
+      const aPending = a.totalAmount - aPaid;
+      const bPending = b.totalAmount - bPaid;
 
-    // 2. Sort results
-    return filtered.sort((a, b) => {
       switch (sortBy) {
         case "pending-desc":
-          return getPendingAmount(b) - getPendingAmount(a);
+          return bPending - aPending;
         case "pending-asc":
-          return getPendingAmount(a) - getPendingAmount(b);
+          return aPending - bPending;
         case "total-desc":
-          return Number(b.totalAmount || 0) - Number(a.totalAmount || 0);
+          return b.totalAmount - a.totalAmount;
         case "total-asc":
-          return Number(a.totalAmount || 0) - Number(b.totalAmount || 0);
+          return a.totalAmount - b.totalAmount;
         case "name-asc":
           return a.expenseName.localeCompare(b.expenseName);
+        case "date-desc":
+          // Newest paid date first
+          return (
+            getLastPaidDate(b.installments) - getLastPaidDate(a.installments)
+          );
+        case "date-asc":
+          // Oldest paid date first (excludes items with 0 / no paid dates from being at the top)
+          const aDateAsc = getLastPaidDate(a.installments) || Infinity;
+          const bDateAsc = getLastPaidDate(b.installments) || Infinity;
+          return aDateAsc - bDateAsc;
         default:
           return 0;
       }
     });
-  }, [expenseData.expenses, categoryFilter, searchQuery, sortBy]);
+
+    return result;
+  }, [expenseData.expenses, searchQuery, categoryFilter, sortBy]);
 
   const fetchExpenses = async () => {
     try {
@@ -462,8 +502,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    const API_BASE_URL =
-      import.meta.env.VITE_API_BASE_URL;
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
     try {
       let uploadedUrls = [...(guestForm.photos || [])];
@@ -2364,19 +2403,46 @@ export default function AdminDashboard() {
                         onSubmit={async (e) => {
                           e.preventDefault();
                           try {
+                            const payload = { ...expenseForm };
+
+                            // If marked as Paid, auto-generate the completed installment
+                            if (payload.paymentStatus === "Paid") {
+                              payload.installments = [
+                                {
+                                  amount: Number(payload.totalAmount),
+                                  date:
+                                    payload.paidDate ||
+                                    new Date().toISOString().split("T")[0],
+                                  status: "Paid",
+                                  note: "Full payment recorded at creation",
+                                  mode: "Cash/Online", // Optional default mode
+                                },
+                              ];
+                            } else {
+                              payload.installments = [];
+                            }
+
+                            // Remove UI-only state before sending to backend
+                            delete payload.paymentStatus;
+                            delete payload.paidDate;
+
                             await axios.post(
                               `${API_BASE}/admin/finance/expense`,
-                              expenseForm,
+                              payload,
                               {
                                 headers: { "x-admin-password": password },
                               },
                             );
+
+                            // Reset form back to defaults
                             setExpenseForm({
                               expenseName: "",
                               category: "Venue",
                               totalAmount: "",
                               vendorContact: "",
                               side: "Both",
+                              paymentStatus: "Paid",
+                              paidDate: new Date().toISOString().split("T")[0],
                             });
                             fetchExpenses();
                           } catch (err) {
@@ -2403,6 +2469,7 @@ export default function AdminDashboard() {
                             className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none font-medium text-sm"
                           />
                         </div>
+
                         <div>
                           <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
                             Category
@@ -2433,6 +2500,7 @@ export default function AdminDashboard() {
                             ))}
                           </select>
                         </div>
+
                         <div>
                           <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
                             Total Agreed Amount (₹)
@@ -2451,6 +2519,49 @@ export default function AdminDashboard() {
                             className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none font-medium text-sm"
                           />
                         </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                            Payment Status
+                          </label>
+                          <select
+                            value={expenseForm.paymentStatus || "Paid"}
+                            onChange={(e) =>
+                              setExpenseForm({
+                                ...expenseForm,
+                                paymentStatus: e.target.value,
+                              })
+                            }
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none font-medium text-sm focus:ring-2 focus:ring-amber-500"
+                          >
+                            <option value="Paid">Fully Paid</option>
+                            <option value="Pending">
+                              Pending / Requires Installments
+                            </option>
+                          </select>
+                        </div>
+
+                        {/* Conditionally render the date picker if marked as Paid */}
+                        {expenseForm.paymentStatus === "Paid" && (
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                              Paid Date
+                            </label>
+                            <input
+                              type="date"
+                              required
+                              value={expenseForm.paidDate || ""}
+                              onChange={(e) =>
+                                setExpenseForm({
+                                  ...expenseForm,
+                                  paidDate: e.target.value,
+                                })
+                              }
+                              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none font-medium text-sm"
+                            />
+                          </div>
+                        )}
+
                         <div>
                           <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
                             Vendor Contact (Optional)
@@ -2468,9 +2579,10 @@ export default function AdminDashboard() {
                             className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none font-medium text-sm"
                           />
                         </div>
+
                         <button
                           type="submit"
-                          className="w-full bg-[#2c1238] text-white p-3.5 rounded-xl font-bold uppercase tracking-widest text-xs shadow-md hover:bg-[#1a0922] transition"
+                          className="w-full bg-[#2c1238] text-white p-3.5 rounded-xl font-bold uppercase tracking-widest text-xs shadow-md hover:bg-[#1a0922] transition mt-2"
                         >
                           Create Expense Ledger
                         </button>
@@ -2515,7 +2627,7 @@ export default function AdminDashboard() {
                           ))}
                         </select>
 
-                        {/* Sort By Dropdown (Replaces Side Filter) */}
+                        {/* Sort By Dropdown */}
                         <select
                           value={sortBy}
                           onChange={(e) => setSortBy(e.target.value)}
@@ -2535,6 +2647,12 @@ export default function AdminDashboard() {
                           </option>
                           <option value="name-asc">
                             Sort by: Vendor Name (A to Z)
+                          </option>
+                          <option value="date-desc">
+                            Sort by: Last Paid Date (Newest First)
+                          </option>
+                          <option value="date-asc">
+                            Sort by: Last Paid Date (Oldest First)
                           </option>
                         </select>
                       </div>
