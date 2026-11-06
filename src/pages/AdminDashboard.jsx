@@ -23,6 +23,7 @@ import {
   LayoutDashboard,
   ShieldCheck,
   Lock,
+  Loader2,
   Server,
 } from "lucide-react";
 import {
@@ -534,9 +535,16 @@ export default function AdminDashboard() {
         photos: uploadedUrls,
       };
 
-      const isEdit = Boolean(guestForm._id);
+      const isEdit = Boolean(
+        guestForm._id ||
+        (typeof editingGuestId !== "undefined" && editingGuestId),
+      );
+      const targetId =
+        guestForm._id ||
+        (typeof editingGuestId !== "undefined" && editingGuestId);
+
       const endpoint = isEdit
-        ? `${API_BASE_URL}/admin/guest/${guestForm._id}`
+        ? `${API_BASE_URL}/admin/guest/${targetId}`
         : `${API_BASE_URL}/admin/guest`;
       const method = isEdit ? "PUT" : "POST";
 
@@ -554,13 +562,49 @@ export default function AdminDashboard() {
         throw new Error(saveData.error || "Failed to save guest");
       }
 
-      // Reset selected local files on success
+      const savedGuest = saveData.guest || saveData;
+
+      // 1. Reset Local File Selection
       if (typeof setSelectedFiles === "function") {
         setSelectedFiles([]);
       }
 
+      // 2. Refresh Directory List (if function exists in component)
+      if (typeof fetchGuests === "function") {
+        fetchGuests();
+      }
+
+      // 3. Reset Form State to Default (for Inline Form)
+      if (typeof setGuestForm === "function") {
+        setGuestForm({
+          fullName: "",
+          nickname: "",
+          gender: "male",
+          useSalutation: true,
+          phone: "",
+          expectedGuests: 1,
+          side: "bride",
+          inviteType: "wedding",
+          withFamily: false,
+          familyMembers: [],
+          photos: [],
+        });
+      }
+
+      // 4. Clear Editing ID state
+      if (typeof setEditingGuestId === "function") {
+        setEditingGuestId(null);
+      }
+
+      // 5. Generate Shareable Link Preview (if state exists)
+      if (typeof setGeneratedLink === "function" && savedGuest.inviteCode) {
+        const origin = window.location.origin;
+        setGeneratedLink(`${origin}/welcome/${savedGuest.inviteCode}`);
+      }
+
+      // 6. Execute Modal Callbacks (if used inside a modal)
       if (typeof onSuccess === "function") {
-        onSuccess(saveData.guest || saveData);
+        onSuccess(savedGuest);
       }
       if (typeof onClose === "function") {
         onClose();
@@ -1454,11 +1498,23 @@ export default function AdminDashboard() {
 
                   <button
                     type="submit"
-                    className="w-full bg-[#2c1238] text-white p-4 rounded-xl font-bold hover:bg-[#1a0922] transition-colors shadow-lg uppercase tracking-widest text-sm mt-4 border border-[#4b1d5e]"
+                    disabled={isSubmitting}
+                    className="w-full bg-[#2c1238] text-white p-4 rounded-xl font-bold hover:bg-[#1a0922] transition-colors shadow-lg uppercase tracking-widest text-sm mt-4 border border-[#4b1d5e] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    {editingGuestId
-                      ? "Save Guest Updates"
-                      : "Generate Secure Link"}
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="animate-spin" size={18} />
+                        <span>
+                          {editingGuestId
+                            ? "Saving Updates..."
+                            : "Generating Link..."}
+                        </span>
+                      </>
+                    ) : editingGuestId ? (
+                      "Save Guest Updates"
+                    ) : (
+                      "Generate Secure Link"
+                    )}
                   </button>
                 </form>
 

@@ -3,8 +3,14 @@ const Guest = require('../models/Guest');
 // Admin: Create a new guest
 exports.createGuest = async (req, res) => {
   try {
-    // req.body now perfectly matches your Guest model, including photos: [...]
-    const newGuest = new Guest(req.body);
+    // Generate inviteCode if not explicitly provided in req.body
+    const inviteCode = req.body.inviteCode || Math.random().toString(36).substring(2, 10);
+
+    const newGuest = new Guest({
+      ...req.body,
+      inviteCode,
+    });
+
     await newGuest.save();
     res.status(201).json({ success: true, guest: newGuest });
   } catch (error) {
