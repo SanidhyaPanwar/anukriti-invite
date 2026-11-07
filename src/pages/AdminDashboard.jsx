@@ -599,7 +599,7 @@ export default function AdminDashboard() {
       // 5. Generate Shareable Link Preview (if state exists)
       if (typeof setGeneratedLink === "function" && savedGuest.inviteCode) {
         const origin = window.location.origin;
-        setGeneratedLink(`${origin}/welcome/${savedGuest.inviteCode}`);
+        setGeneratedLink(`${origin}/invite/${savedGuest.inviteCode}`);
       }
 
       // 6. Execute Modal Callbacks (if used inside a modal)

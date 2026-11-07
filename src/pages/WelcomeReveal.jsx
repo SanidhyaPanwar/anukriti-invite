@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
-import { Image as ImageIcon, MailOpen, Music } from "lucide-react";
+import { Image as ImageIcon, MailOpen, Music, Calendar } from "lucide-react";
 import confetti from "canvas-confetti";
 import { useAudio } from "../components/GlobalAudio";
 import ganeshImg from "../assets/Vianyak.png";
@@ -11,6 +11,7 @@ import ganeshImgLight from "../assets/Vinayak-light.png";
 export default function WelcomeReveal() {
   const { playAudio } = useAudio();
   const { inviteCode } = useParams();
+  const navigate = useNavigate();
 
   const [guest, setGuest] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -310,6 +311,17 @@ export default function WelcomeReveal() {
     }, 5000);
   };
 
+// Navigation Handler for Events Button
+  const handleOpenEvents = () => {
+    // Open the envelope animation briefly before redirecting
+    setInvitationOpened(true);
+
+    // Redirect to the exact timeline route after a short delay for the animation
+    setTimeout(() => {
+      navigate(`/invite/${inviteCode}/timeline`);
+    }, 400);
+  };
+
   // HEART-SHAPED SCRATCH CARD SETUP
   const setupScratchCanvas = (node, heartIndex) => {
     if (!node || node.dataset.initialized) return;
@@ -567,12 +579,24 @@ export default function WelcomeReveal() {
                 </p>
               </div>
 
-              <button
-                onClick={() => setInvitationOpened(true)}
-                className="w-full bg-gradient-to-r from-lavender-900 via-lavender-950 to-lavender-900 text-gold-light border border-gold/40 py-4 px-6 rounded-2xl font-semibold flex items-center justify-center gap-3 shadow-xl transition-all text-sm tracking-widest uppercase cursor-pointer hover:scale-[1.02] mt-4"
-              >
-                <MailOpen size={16} className="text-gold" /> Open Invitation
-              </button>
+              {/* Cover Card Actions: Open Invitation & Open Events */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full mt-4">
+                <button
+                  type="button"
+                  onClick={() => setInvitationOpened(true)}
+                  className="w-full bg-gradient-to-r from-lavender-900 via-lavender-950 to-lavender-900 text-gold-light border border-gold/40 py-3.5 px-4 rounded-2xl font-semibold flex items-center justify-center gap-2 shadow-xl transition-all text-xs md:text-sm tracking-widest uppercase cursor-pointer hover:scale-[1.02]"
+                >
+                  <MailOpen size={16} className="text-gold shrink-0" /> Open Invitation
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenEvents}
+                  className="w-full bg-gradient-to-r from-lavender-900 via-lavender-950 to-lavender-900 text-gold-light border border-gold/40 py-3.5 px-4 rounded-2xl font-semibold flex items-center justify-center gap-2 shadow-xl transition-all text-xs md:text-sm tracking-widest uppercase cursor-pointer hover:scale-[1.02]"
+                >
+                  <Calendar size={16} className="text-gold shrink-0" /> Open Events
+                </button>
+              </div>
             </motion.div>
           ) : (
             /* STEP 2: MAIN REVEAL CONTENT (3 SEPARATE CARDS) */
@@ -796,6 +820,13 @@ export default function WelcomeReveal() {
                     </div>
                   </div>
                 )}
+                <button
+                  type="button"
+                  onClick={handleOpenEvents}
+                  className="w-full bg-gradient-to-r from-lavender-900 via-lavender-950 to-lavender-900 text-gold-light border border-gold/40 py-3.5 px-4 rounded-2xl font-semibold flex items-center justify-center gap-2 shadow-xl transition-all text-xs md:text-sm tracking-widest uppercase cursor-pointer hover:scale-[1.02]"
+                >
+                  <Calendar size={16} className="text-gold shrink-0" /> Open Events
+                </button>
               </motion.div>
             </div>
           )}
